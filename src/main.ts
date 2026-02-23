@@ -13,7 +13,7 @@ app.use(router)
 app.use(i18n)
 app.use(
   createAuth0({
-    domain: import.meta.env.VITE_AUTH0_DOMAIN || 'dev-amcysd1ektix3lsp.eu.auth0.com',
+    domain: import.meta.env.VITE_AUTH0_DOMAIN || '',
     clientId: import.meta.env.VITE_AUTH0_CLIENT_ID || '',
     authorizationParams: {
       redirect_uri: window.location.origin,
