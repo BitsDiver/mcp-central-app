@@ -7,19 +7,22 @@ import AppInput from '@/components/ui/AppInput.vue'
 import AppAlert from '@/components/ui/AppAlert.vue'
 import SkeletonBlock from '@/components/ui/SkeletonBlock.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import { useTenantStore } from '@/stores/tenant'
 import { useSocketStore } from '@/stores/socket'
 import { useEndpointStore } from '@/stores/endpoints'
 import { useToolStore } from '@/stores/tools'
 import { useStatusStore } from '@/stores/status'
+import { useToastStore } from '@/stores/toast'
 import { useError } from '@/composables/useError'
-import type { NewApiKey } from '@/types'
+import type { NewApiKey, Tenant } from '@/types'
 
 const tenantStore = useTenantStore()
 const socketStore = useSocketStore()
 const endpointStore = useEndpointStore()
 const toolStore = useToolStore()
 const statusStore = useStatusStore()
+const toast = useToastStore()
 const { useFormErrors } = useError()
 
 onMounted(async () => {
@@ -34,6 +37,41 @@ const { errors, setFromApiError, clearErrors } = useFormErrors()
 const createdKey = ref<NewApiKey | null>(null)
 const copied = ref(false)
 const switching = ref<string | null>(null)
+
+// ── Delete tenant ──────────────────────────────────────────
+const deleteTarget = ref<Tenant | null>(null)
+const deleting = ref(false)
+
+async function confirmDeleteTenant() {
+  if (!deleteTarget.value) return
+  const id = deleteTarget.value.id
+  const wasActive = tenantStore.selectedTenant?.id === id
+  deleting.value = true
+  try {
+    await tenantStore.deleteTenant(id)
+    deleteTarget.value = null
+
+    // After deleting the active tenant, reconnect socket to the next available one
+    if (wasActive) {
+      endpointStore.clear()
+      toolStore.clear()
+      statusStore.clear()
+      const next = tenantStore.tenants[0]
+      if (next) {
+        tenantStore.setSelectedTenant(next)
+        await socketStore.selectTenant(next.id)
+        await tenantStore.loadKeys()
+        if (tenantStore.apiKeys.length > 0) tenantStore.selectKey(tenantStore.apiKeys[0].id)
+        await Promise.all([endpointStore.load(), toolStore.load(), statusStore.load()])
+      }
+    }
+  } catch (err: any) {
+    toast.error(err?.message ?? 'Failed to delete tenant.')
+    deleteTarget.value = null
+  } finally {
+    deleting.value = false
+  }
+}
 
 function openWizard() {
   wizardStep.value = 'name'
@@ -79,8 +117,10 @@ async function selectTenant(tenantId: string) {
   try {
     const tenant = tenantStore.tenants.find((t) => t.id === tenantId)
     if (!tenant) return
-    await tenantStore.selectTenant(tenant)
+    tenantStore.setSelectedTenant(tenant)
     await socketStore.selectTenant(tenantId)
+    await tenantStore.loadKeys()
+    if (tenantStore.apiKeys.length > 0) tenantStore.selectKey(tenantStore.apiKeys[0].id)
     endpointStore.clear()
     toolStore.clear()
     statusStore.clear()
@@ -156,16 +196,26 @@ const modalTitle = computed(() =>
                 <span v-else class="badge badge-neutral">—</span>
               </td>
               <td class="px-5 py-3 text-right">
-                <AppButton
-                  v-if="tenantStore.selectedTenant?.id !== tenant.id"
-                  variant="secondary"
-                  size="sm"
-                  :loading="switching === tenant.id"
-                  @click="selectTenant(tenant.id)"
-                >
-                  Switch
-                </AppButton>
-                <span v-else class="text-xs font-medium" style="color: var(--text-tertiary);">Current</span>
+                <div class="flex items-center gap-2 justify-end">
+                  <AppButton
+                    v-if="tenantStore.selectedTenant?.id !== tenant.id"
+                    variant="secondary"
+                    size="sm"
+                    :loading="switching === tenant.id"
+                    @click="selectTenant(tenant.id)"
+                  >
+                    Switch
+                  </AppButton>
+                  <span v-else class="text-xs font-medium" style="color: var(--text-tertiary);">Current</span>
+                  <AppButton
+                    variant="ghost"
+                    size="sm"
+                    :title="'Delete ' + tenant.name"
+                    @click="deleteTarget = tenant"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-red-400"><path d="M3 6h18M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                  </AppButton>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -225,5 +275,21 @@ const modalTitle = computed(() =>
         <AppButton v-else @click="finishWizard">I've saved my key — Done</AppButton>
       </template>
     </AppModal>
+
+    <ConfirmDialog
+      :open="!!deleteTarget"
+      title="Delete Tenant"
+      :message="deleteTarget
+        ? `Permanently delete &quot;${deleteTarget.name}&quot;? This will remove all endpoints, API keys, and data associated with it. This cannot be undone.${
+            tenantStore.selectedTenant?.id === deleteTarget.id
+              ? ' This is your currently active tenant.'
+              : ''
+          }`
+        : ''"
+      confirm-label="Delete"
+      :loading="deleting"
+      @confirm="confirmDeleteTenant"
+      @cancel="deleteTarget = null"
+    />
   </AppLayout>
 </template>

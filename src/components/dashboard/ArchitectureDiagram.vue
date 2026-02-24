@@ -65,7 +65,7 @@ const statusLabel = (status: string) => {
       </div>
     </div>
 
-    <div class="relative flex items-center gap-0 overflow-x-auto pb-2">
+    <div class="relative flex items-center gap-0 overflow-x-auto pb-2 pt-2">
       <div class="flex flex-col items-center shrink-0 w-28">
         <div
           class="w-14 h-14 rounded-xl flex items-center justify-center border-2 mb-2"
@@ -85,7 +85,7 @@ const statusLabel = (status: string) => {
         <div class="w-full flex items-center gap-1">
           <div class="flex-1 h-px" style="background: var(--border-strong);"></div>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style="color: var(--text-tertiary);">
-            <path d="M6 1l4 4H7v6H5V5H2z"/>
+            <path d="M3 2l6 4-6 4z"/>
           </svg>
         </div>
         <span class="text-[9px] mt-1 text-center" style="color: var(--text-tertiary);">Tenant API Key</span>
@@ -94,7 +94,7 @@ const statusLabel = (status: string) => {
       <div class="flex flex-col items-center shrink-0 w-32">
         <div
           class="w-16 h-16 rounded-xl flex items-center justify-center border-2 mb-2 relative"
-          style="background: rgba(59,130,246,0.1); border-color: #3b82f6;"
+          style="background: rgba(59,130,246,0.1); border-color: #3b82f6; min-height: 4rem;"
         >
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.75">
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
@@ -113,7 +113,7 @@ const statusLabel = (status: string) => {
         <div class="w-full flex items-center gap-1">
           <div class="flex-1 h-px" style="background: var(--border-strong);"></div>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style="color: var(--text-tertiary);">
-            <path d="M6 1l4 4H7v6H5V5H2z"/>
+            <path d="M3 2l6 4-6 4z"/>
           </svg>
         </div>
         <span class="text-[9px] mt-1 text-center" style="color: var(--text-tertiary);">Per-server auth</span>

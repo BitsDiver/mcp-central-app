@@ -28,8 +28,10 @@ async function switchTenant(tenantId: string) {
   try {
     const tenant = tenantStore.tenants.find((t) => t.id === tenantId)
     if (!tenant) return
-    await tenantStore.selectTenant(tenant)
+    tenantStore.setSelectedTenant(tenant)
     await socketStore.selectTenant(tenant.id)
+    await tenantStore.loadKeys()
+    if (tenantStore.apiKeys.length > 0) tenantStore.selectKey(tenantStore.apiKeys[0].id)
     endpointStore.clear()
     toolStore.clear()
     statusStore.clear()

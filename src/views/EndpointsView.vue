@@ -38,6 +38,7 @@ const globalError = computed(() => errors.value['_global'])
 
 const deleteTarget = ref<Endpoint | null>(null)
 const deleting = ref(false)
+const refreshing = ref<string | null>(null)
 
 const form = ref({
   name: '',
@@ -57,6 +58,11 @@ const transportOptions = [
 ]
 
 function getUpstreamStatus(endpointId: string): EndpointStatus {
+  // Prefer the connectionStatus field on the endpoint itself (populated by listEndpoints
+  // and kept current via connection_status socket events patched into the store).
+  // Fall back to statusStore for any endpoint not yet in the endpoint list.
+  const ep = endpointStore.endpoints.find((e) => e.id === endpointId)
+  if (ep?.connectionStatus) return ep.connectionStatus
   return (statusStore.upstreams.find((u) => u.endpointId === endpointId)?.status ?? 'disconnected') as EndpointStatus
 }
 
@@ -161,7 +167,11 @@ async function submit() {
       payload.args = form.value.args.split('\n').map((a) => a.trim()).filter(Boolean)
       payload.env = parseEnvLines(form.value.env)
     }
-    await endpointStore.create(payload)
+    if (editingEndpoint.value) {
+      await endpointStore.update(editingEndpoint.value.id, payload)
+    } else {
+      await endpointStore.create(payload)
+    }
     showModal.value = false
   } catch (err) {
     setFromApiError(err)
@@ -190,6 +200,19 @@ async function toggle(ep: Endpoint) {
   } catch (err) {
     const toast = (await import('@/stores/toast')).useToastStore()
     toast.error(resolveMessage(err))
+  }
+}
+
+async function refresh(ep: Endpoint) {
+  if (refreshing.value) return
+  refreshing.value = ep.id
+  try {
+    await endpointStore.refresh(ep.id)
+  } catch (err) {
+    const toast = (await import('@/stores/toast')).useToastStore()
+    toast.error(resolveMessage(err))
+  } finally {
+    refreshing.value = null
   }
 }
 </script>
@@ -288,6 +311,17 @@ async function toggle(ep: Endpoint) {
                 </td>
                 <td class="px-5 py-3">
                   <div class="flex items-center gap-1 justify-end">
+                    <AppButton
+                      variant="ghost" size="sm"
+                      :loading="refreshing === ep.id"
+                      :title="ep.connectionStatus === 'connected' ? 'Re-list tools' : 'Reconnect'"
+                      @click="refresh(ep)"
+                    >
+                      <svg v-if="refreshing !== ep.id" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 4v6h-6M1 20v-6h6"/>
+                        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                      </svg>
+                    </AppButton>
                     <AppButton variant="ghost" size="sm" @click="openEdit(ep)">
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </AppButton>

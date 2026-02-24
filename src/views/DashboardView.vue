@@ -112,9 +112,17 @@ const isLoading = computed(() => statusStore.isLoading || toolStore.isLoading)
           >
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium truncate" style="color: var(--text-primary);">{{ upstream.namespace }}</p>
-              <p v-if="upstream.lastError" class="text-xs truncate text-red-500 mt-0.5">{{ upstream.lastError }}</p>
             </div>
-            <StatusBadge :status="(upstream.status as EndpointStatus)" />
+            <div v-if="upstream.status === 'error' && upstream.lastError" class="relative group/errortip">
+              <StatusBadge :status="(upstream.status as EndpointStatus)" />
+              <div class="pointer-events-none absolute bottom-full right-0 mb-2 z-50 hidden group-hover/errortip:block">
+                <div class="max-w-xs rounded-lg px-3 py-2 text-xs shadow-lg" style="background: var(--bg-overlay); border: 1px solid var(--border-default); color: var(--text-secondary); white-space: normal; word-break: break-word;">
+                  {{ upstream.lastError }}
+                </div>
+                <div class="absolute right-3 top-full w-0 h-0" style="border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 5px solid var(--border-default);"></div>
+              </div>
+            </div>
+            <StatusBadge v-else :status="(upstream.status as EndpointStatus)" />
             <div class="text-right shrink-0">
               <p class="text-sm font-medium" style="color: var(--text-primary);">{{ upstream.toolCount }}</p>
               <p class="text-xs" style="color: var(--text-tertiary);">tools</p>

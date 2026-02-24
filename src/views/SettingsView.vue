@@ -1,145 +1,90 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
-import AppToggle from '@/components/ui/AppToggle.vue'
-import AppInput from '@/components/ui/AppInput.vue'
-import AppButton from '@/components/ui/AppButton.vue'
+import SettingsProfile from '@/components/settings/SettingsProfile.vue'
+import SettingsTenants from '@/components/settings/SettingsTenants.vue'
+import SettingsKeys from '@/components/settings/SettingsKeys.vue'
+import SettingsAI from '@/components/settings/SettingsAI.vue'
+import SettingsUsers from '@/components/settings/SettingsUsers.vue'
 import { useAuthStore } from '@/stores/auth'
-import { useDarkMode } from '@/composables/useDarkMode'
-import { useChatSettingsStore } from '@/stores/chatSettings'
 
 const authStore = useAuthStore()
-const { isDark, toggle } = useDarkMode()
-const chatSettings = useChatSettingsStore()
 
-onMounted(() => {
-  chatSettings.fetchModels()
+type Panel = 'profile' | 'tenants' | 'keys' | 'ai' | 'users'
+const activePanel = ref<Panel>('profile')
+
+const navItems = computed(() => {
+  const items: { id: Panel; label: string; icon: string }[] = [
+    {
+      id: 'profile',
+      label: 'Profile',
+      icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
+    },
+    {
+      id: 'tenants',
+      label: authStore.isAdmin ? 'Tenants' : 'My Tenants',
+      icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
+    },
+    {
+      id: 'keys',
+      label: 'API Keys',
+      icon: 'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z',
+    },
+    {
+      id: 'ai',
+      label: 'AI Settings',
+      icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17H4a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2h-1',
+    },
+  ]
+  if (authStore.isAdmin) {
+    items.push({
+      id: 'users',
+      label: 'Users',
+      icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
+    })
+  }
+  return items
 })
-
-function formatDate(date: string): string {
-  return new Intl.DateTimeFormat('en', { dateStyle: 'long' }).format(new Date(date))
-}
-
-function formatModelSize(bytes: number): string {
-  const gb = bytes / 1073741824
-  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / 1048576).toFixed(0)} MB`
-}
 </script>
 
 <template>
   <AppLayout>
-    <div class="px-4 md:px-6 lg:px-8 py-6 max-w-2xl mx-auto">
-      <h1 class="text-xl font-semibold mb-6" style="color: var(--text-primary);">Settings</h1>
+    <div class="px-4 md:px-6 lg:px-8 py-8 flex justify-center">
+      <div class="card w-full max-w-5xl overflow-hidden flex" style="min-height: 520px;">
 
-      <div class="card p-5 mb-4">
-        <h2 class="text-sm font-semibold mb-4" style="color: var(--text-primary);">Profile</h2>
-        <dl class="flex flex-col gap-3">
-          <div class="flex items-center justify-between py-2 border-b" style="border-color: var(--border-default);">
-            <dt class="text-sm" style="color: var(--text-secondary);">Name</dt>
-            <dd class="text-sm font-medium" style="color: var(--text-primary);">{{ authStore.user?.name ?? '—' }}</dd>
-          </div>
-          <div class="flex items-center justify-between py-2 border-b" style="border-color: var(--border-default);">
-            <dt class="text-sm" style="color: var(--text-secondary);">Email</dt>
-            <dd class="text-sm font-medium" style="color: var(--text-primary);">{{ authStore.user?.email ?? '—' }}</dd>
-          </div>
-          <div class="flex items-center justify-between py-2 border-b" style="border-color: var(--border-default);">
-            <dt class="text-sm" style="color: var(--text-secondary);">Role</dt>
-            <dd>
-              <span class="badge" :class="authStore.isAdmin ? 'badge-primary' : 'badge-neutral'">
-                {{ authStore.user?.role ?? '—' }}
-              </span>
-            </dd>
-          </div>
-          <div class="flex items-center justify-between py-2">
-            <dt class="text-sm" style="color: var(--text-secondary);">Member since</dt>
-            <dd class="text-sm" style="color: var(--text-primary);">{{ authStore.user?.createdAt ? formatDate(authStore.user.createdAt) : '—' }}</dd>
-          </div>
-        </dl>
-      </div>
+        <!-- Sub-nav -->
+        <aside
+          class="w-48 shrink-0 border-r flex flex-col py-4 px-2 gap-0.5"
+          style="border-color: var(--border-default); background: var(--bg-muted);"
+        >
+          <p class="px-3 pt-1 pb-3 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">Settings</p>
+          <button
+            v-for="item in navItems"
+            :key="item.id"
+            :class="[
+              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm w-full text-left transition-colors duration-150',
+              activePanel === item.id
+                ? 'font-medium bg-[var(--bg-active)] text-[var(--text-active)]'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+            ]"
+            @click="activePanel = item.id"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="shrink-0">
+              <path :d="item.icon" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>{{ item.label }}</span>
+          </button>
+        </aside>
 
-      <div class="card p-5 mb-4">
-        <h2 class="text-sm font-semibold mb-4" style="color: var(--text-primary);">Preferences</h2>
-        <div class="flex items-center justify-between">
-          <div>
-            <p class="text-sm font-medium" style="color: var(--text-primary);">Dark mode</p>
-            <p class="text-xs mt-0.5" style="color: var(--text-tertiary);">Saved automatically in your browser</p>
-          </div>
-          <AppToggle :model-value="isDark" @update:model-value="toggle" />
-        </div>
-      </div>
+        <!-- Panel -->
+        <main class="flex-1 overflow-y-auto">
+          <SettingsProfile v-if="activePanel === 'profile'" />
+          <SettingsTenants v-else-if="activePanel === 'tenants'" />
+          <SettingsKeys v-else-if="activePanel === 'keys'" />
+          <SettingsAI v-else-if="activePanel === 'ai'" />
+          <SettingsUsers v-else-if="activePanel === 'users' && authStore.isAdmin" />
+        </main>
 
-      <div class="card p-5">
-        <h2 class="text-sm font-semibold mb-1" style="color: var(--text-primary);">AI Chat</h2>
-        <p class="text-xs mb-5" style="color: var(--text-tertiary);">Configure your local Ollama server for the Chat page.</p>
-
-        <div class="flex flex-col gap-4">
-          <div class="flex gap-2 items-end">
-            <div class="flex-1">
-              <AppInput
-                id="ollama-url"
-                label="Ollama server URL"
-                :model-value="chatSettings.settings.ollamaUrl"
-                @update:model-value="chatSettings.update({ ollamaUrl: $event })"
-                placeholder="http://localhost:11434"
-                hint="The base URL of your running Ollama instance"
-              />
-            </div>
-            <AppButton
-              variant="secondary"
-              size="md"
-              :loading="chatSettings.isLoadingModels"
-              @click="chatSettings.fetchModels()"
-            >
-              Detect models
-            </AppButton>
-          </div>
-
-          <div v-if="chatSettings.modelLoadError" class="flex items-center gap-2 px-3 py-2 rounded-lg text-xs" style="background: var(--color-danger-50); color: var(--color-danger-700);">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01" stroke-linecap="round"/></svg>
-            {{ chatSettings.modelLoadError }}
-          </div>
-
-          <div>
-            <label class="text-sm font-medium block mb-1.5" style="color: var(--text-primary);">Model</label>
-            <select
-              :value="chatSettings.settings.selectedModel"
-              @change="chatSettings.update({ selectedModel: ($event.target as HTMLSelectElement).value })"
-              class="w-full px-3 py-2 text-sm rounded-lg border outline-none transition-colors duration-150"
-              style="background: var(--bg-input); color: var(--text-primary); border-color: var(--border-default);"
-            >
-              <option value="" disabled>{{ chatSettings.availableModels.length === 0 ? 'No models detected' : 'Select a model' }}</option>
-              <option v-for="m in chatSettings.availableModels" :key="m.name" :value="m.name">
-                {{ m.name }} ({{ formatModelSize(m.size) }})
-              </option>
-            </select>
-            <p v-if="chatSettings.availableModels.length === 0 && !chatSettings.modelLoadError" class="text-xs mt-1" style="color: var(--text-tertiary);">
-              Click "Detect models" after starting Ollama
-            </p>
-          </div>
-
-          <AppInput
-            id="context-size"
-            label="Context window size"
-            type="number"
-            :model-value="String(chatSettings.settings.contextSize)"
-            @update:model-value="chatSettings.update({ contextSize: Number($event) })"
-            hint="Number of tokens in the context window (e.g. 4096, 8192, 32768)"
-            placeholder="8192"
-          />
-
-          <div class="flex flex-col gap-1.5">
-            <label class="text-sm font-medium" style="color: var(--text-primary);">System prompt <span class="font-normal" style="color: var(--text-tertiary);">(optional)</span></label>
-            <textarea
-              :value="chatSettings.settings.systemPrompt"
-              @input="chatSettings.update({ systemPrompt: ($event.target as HTMLTextAreaElement).value })"
-              placeholder="You are a helpful assistant with access to MCP tools..."
-              rows="3"
-              class="w-full px-3 py-2 text-sm rounded-lg border outline-none resize-y transition-colors duration-150"
-              style="background: var(--bg-input); color: var(--text-primary); border-color: var(--border-default); font-family: var(--font-sans);"
-            />
-            <p class="text-xs" style="color: var(--text-tertiary);">Injected as the system message before every conversation</p>
-          </div>
-        </div>
       </div>
     </div>
   </AppLayout>

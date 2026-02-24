@@ -1,52 +1,99 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import type { Endpoint } from '@/types'
-import { api } from '@/api/client'
-import { useToastStore } from './toast'
+import { defineStore } from "pinia";
+import { ref } from "vue";
+import type { Endpoint } from "@/types";
+import { emit } from "@/api/socket";
+import { useToastStore } from "./toast";
 
-export const useEndpointStore = defineStore('endpoints', () => {
-  const endpoints = ref<Endpoint[]>([])
-  const isLoading = ref(false)
+export const useEndpointStore = defineStore("endpoints", () => {
+  const endpoints = ref<Endpoint[]>([]);
+  const isLoading = ref(false);
 
   async function load(): Promise<void> {
-    isLoading.value = true
+    isLoading.value = true;
     try {
-      const data = await api.getEndpoints() as { endpoints: Endpoint[] }
-      endpoints.value = data.endpoints
+      const res = await emit<{ endpoints: Endpoint[]; count: number }>(
+        "listEndpoints",
+        {},
+      );
+      if (res.status === "error") throw new Error(res.message ?? res.code);
+      endpoints.value = res.data!.endpoints;
     } finally {
-      isLoading.value = false
+      isLoading.value = false;
     }
   }
 
   async function create(payload: Record<string, unknown>): Promise<Endpoint> {
-    const data = await api.createEndpoint(payload) as { endpoint: Endpoint }
-    endpoints.value.push(data.endpoint)
-    const toast = useToastStore()
-    toast.success('Endpoint added successfully.')
-    return data.endpoint
+    const res = await emit<{ endpoint: Endpoint }>("createEndpoint", payload);
+    if (res.status === "error") throw new Error(res.message ?? res.code);
+    const endpoint = res.data!.endpoint;
+    endpoints.value.push(endpoint);
+    const toast = useToastStore();
+    toast.success("Endpoint added successfully.");
+    return endpoint;
   }
 
   async function remove(id: string): Promise<void> {
-    await api.deleteEndpoint(id)
-    endpoints.value = endpoints.value.filter((e) => e.id !== id)
-    const toast = useToastStore()
-    toast.success('Endpoint removed.')
+    const res = await emit("deleteEndpoint", { endpointId: id });
+    if (res.status === "error") throw new Error(res.message ?? res.code);
+    endpoints.value = endpoints.value.filter((e) => e.id !== id);
+    const toast = useToastStore();
+    toast.success("Endpoint removed.");
+  }
+
+  async function update(
+    id: string,
+    payload: Record<string, unknown>,
+  ): Promise<Endpoint> {
+    const res = await emit<{ endpoint: Endpoint }>("updateEndpoint", {
+      endpointId: id,
+      ...payload,
+    });
+    if (res.status === "error") throw new Error(res.message ?? res.code);
+    const updated = res.data!.endpoint;
+    const idx = endpoints.value.findIndex((e) => e.id === id);
+    if (idx !== -1) endpoints.value[idx] = updated;
+    const toast = useToastStore();
+    toast.success("Endpoint updated successfully.");
+    return updated;
   }
 
   async function toggle(id: string, isEnabled: boolean): Promise<void> {
-    await api.toggleEndpoint(id, isEnabled)
-    const ep = endpoints.value.find((e) => e.id === id)
-    if (ep) ep.isEnabled = isEnabled
+    const res = await emit("toggleEndpoint", { endpointId: id, isEnabled });
+    if (res.status === "error") throw new Error(res.message ?? res.code);
+    const ep = endpoints.value.find((e) => e.id === id);
+    if (ep) ep.isEnabled = isEnabled;
   }
-
-  function updateFromSocket(endpointId: string, patch: Partial<Endpoint>): void {
-    const ep = endpoints.value.find((e) => e.id === endpointId)
-    if (ep) Object.assign(ep, patch)
+  /**
+   * Refresh a specific endpoint on demand:
+   * - reconnects immediately if disconnected / in error state
+   * - re-discovers tools if already connected
+   */
+  async function refresh(id: string): Promise<void> {
+    const res = await emit("refreshEndpoint", { endpointId: id });
+    if (res.status === "error") throw new Error(res.message ?? res.code);
+  }
+  function updateFromSocket(
+    endpointId: string,
+    patch: Partial<Endpoint>,
+  ): void {
+    const ep = endpoints.value.find((e) => e.id === endpointId);
+    if (ep) Object.assign(ep, patch);
   }
 
   function clear(): void {
-    endpoints.value = []
+    endpoints.value = [];
   }
 
-  return { endpoints, isLoading, load, create, remove, toggle, updateFromSocket, clear }
-})
+  return {
+    endpoints,
+    isLoading,
+    load,
+    create,
+    update,
+    remove,
+    toggle,
+    refresh,
+    updateFromSocket,
+    clear,
+  };
+});
