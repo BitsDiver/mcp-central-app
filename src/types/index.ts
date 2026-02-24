@@ -121,12 +121,16 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   createdAt: string;
   isStreaming?: boolean;
+  /** Set when generation ended with an error — kept in history for traceability. */
+  error?: string;
 }
 
 export interface ChatSession {
   id: string;
   title: string;
   tenantId?: string | null;
+  /** Overrides the global system prompt from settings for this session only */
+  systemPrompt?: string;
   messages: ChatMessage[];
   createdAt: string;
   updatedAt: string;
@@ -139,8 +143,35 @@ export interface OllamaModel {
 }
 
 export interface ChatSettings {
+  // ── Ollama (direct browser call) ─────────────────────────────
   ollamaUrl: string;
+  /** Optional Bearer token for Ollama instances exposed with authentication */
+  ollamaApiKey?: string;
   selectedModel: string;
   contextSize: number;
   systemPrompt: string;
+  // ── Multi-provider ────────────────────────────────────────────
+  /** Active provider. "ollama" uses direct browser connection; others go via backend. */
+  provider: LLMProvider;
+  /** Persisted configuration per provider (model, context size, system prompt). */
+  perProviderSettings?: Partial<Record<LLMProvider, ProviderConfig>>;
+}
+
+/** Per-provider persisted configuration. */
+export interface ProviderConfig {
+  selectedModel: string;
+  contextSize: number;
+  systemPrompt: string;
+}
+
+/** LLM backend provider identifier */
+export type LLMProvider = "ollama" | "openai" | "anthropic" | "gemini";
+
+/** Info about a stored provider key (never contains the actual key) */
+export interface ProviderKeyInfo {
+  provider: LLMProvider;
+  /** Last 4 characters of the original API key */
+  keyHint: string;
+  createdAt: string;
+  updatedAt: string;
 }

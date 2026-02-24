@@ -1,4 +1,4 @@
-import { emit } from "@/api/socket";
+import { emitKeys } from "@/api/socket";
 
 const KEY_PREFIX = "mcp_chat_key_";
 
@@ -49,7 +49,7 @@ export async function revokeChatKey(tenantId: string): Promise<void> {
   clearChatKey(tenantId);
   if (!stored) return;
   try {
-    await emit("revokeKey", { keyId: stored.id });
+    await emitKeys("revokeKey", { keyId: stored.id });
   } catch {
     // Key may already be gone — that's fine
   }
@@ -77,6 +77,6 @@ export async function revokeAllChatKeys(): Promise<void> {
 
   // Best-effort server-side revocation (socket may be mid-disconnection)
   await Promise.allSettled(
-    entries.map(({ id }) => emit("revokeKey", { keyId: id })),
+    entries.map(({ id }) => emitKeys("revokeKey", { keyId: id })),
   );
 }

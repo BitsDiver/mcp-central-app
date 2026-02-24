@@ -9,7 +9,7 @@
   import { useChatSettingsStore } from '@/stores/chatSettings';
   import { useToolStore } from '@/stores/tools';
   import { useTenantStore } from '@/stores/tenant';
-  import { useOllama } from '@/composables/useOllama';
+  import { useChat } from '@/composables/useChat';
   import { getChatKey, clearChatKey, storeChatKey } from '@/composables/useChatMcpKey';
   import { initMcpSession, resetMcpSession } from '@/api/mcpClient';
   import type { ChatMessage as ChatMessageType, ChatAttachment, ChatToolCall } from '@/types';
@@ -18,12 +18,25 @@
   const settingsStore = useChatSettingsStore();
   const toolStore = useToolStore();
   const tenantStore = useTenantStore();
-  const { isGenerating, generate, stop } = useOllama();
+  const { isGenerating, generate, stop } = useChat();
 
   const messagesContainer = ref<HTMLElement | null>(null);
   const sidebarOpen = ref(true);
+  const sidebarWidth = ref(
+    parseInt(localStorage.getItem('chat-sidebar-width') ?? '240', 10),
+  );
+  const isResizing = ref(false);
   const linkToTenant = ref(false);
   const generationError = ref<string | null>(null);
+  const showSessionPrompt = ref(false);
+  /** Cumulative token usage (prompt + completion) for the latest completed turn */
+  const usedTokens = ref(0);
+
+  const contextUsage = computed(() =>
+    settingsStore.settings.contextSize > 0
+      ? usedTokens.value / settingsStore.settings.contextSize
+      : 0,
+  );
 
   /** True once a valid MCP session has been initialised for the active tenant */
   const chatKeyReady = ref(false);
@@ -69,9 +82,11 @@
   const session = computed(() => chatStore.activeSession);
   const messages = computed(() => session.value?.messages ?? []);
 
-  const isConfigured = computed(
-    () => !!settingsStore.settings.ollamaUrl && !!settingsStore.settings.selectedModel,
-  );
+  const isConfigured = computed(() => {
+    const p = settingsStore.settings.provider ?? 'ollama';
+    if (p === 'ollama') return !!settingsStore.settings.ollamaUrl && !!settingsStore.settings.selectedModel;
+    return !!settingsStore.settings.selectedModel;
+  });
 
   function scrollToBottom(smooth = false) {
     nextTick(() => {
@@ -87,7 +102,10 @@
 
   watch(
     () => chatStore.activeSessionId,
-    () => nextTick(() => scrollToBottom(false)),
+    () => {
+      usedTokens.value = 0;
+      nextTick(() => scrollToBottom(false));
+    },
   );
 
   onMounted(() => {
@@ -138,9 +156,12 @@
 
     await generate({
       ollamaUrl: settingsStore.settings.ollamaUrl,
+      ollamaApiKey: settingsStore.settings.ollamaApiKey || undefined,
       model: settingsStore.settings.selectedModel,
       contextSize: settingsStore.settings.contextSize,
-      systemPrompt: settingsStore.settings.systemPrompt || undefined,
+      // Session-level prompt overrides global setting
+      systemPrompt:
+        (session.value?.systemPrompt || settingsStore.settings.systemPrompt) || undefined,
       messages: allMessages.slice(0, -1),
       tools: chatKeyReady.value ? toolStore.tools : [],
 
@@ -206,8 +227,14 @@
       },
 
       onError(err) {
+        // Inject the error directly into the message stream for traceability
+        chatStore.updateMessage(sessionId, assistantId, { isStreaming: false, error: err });
+        // Also keep the banner for visibility
         generationError.value = err;
-        chatStore.updateMessage(sessionId, assistantId, { isStreaming: false });
+      },
+
+      onUsage(used) {
+        usedTokens.value = used;
       },
     });
   }
@@ -226,6 +253,97 @@
     chatStore.deleteSession(id);
   }
 
+  /**
+   * Retry from a specific user message: discard everything after it and re-generate.
+   */
+  async function handleRetry(userMsgId: string) {
+    if (!session.value) return;
+    const sessionId = session.value.id;
+    const msgs = session.value.messages;
+    const userMsg = msgs.find((m) => m.id === userMsgId);
+    if (!userMsg || userMsg.role !== 'user') return;
+
+    // Clear the error banner and remove all messages after the user one
+    generationError.value = null;
+    chatStore.removeMessagesAfter(sessionId, userMsgId);
+
+    // Create a fresh assistant placeholder and generate
+    const assistantId = generateId();
+    chatStore.addMessage(sessionId, {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      isStreaming: true,
+      createdAt: new Date().toISOString(),
+    });
+    scrollToBottom(true);
+
+    const allMessages = [
+      ...chatStore.activeSession!.messages.filter((m) => !m.isStreaming || m.id === assistantId),
+    ];
+
+    let activeTcMessage: typeof msgs[number] | null = null;
+
+    await generate({
+      ollamaUrl: settingsStore.settings.ollamaUrl,
+      ollamaApiKey: settingsStore.settings.ollamaApiKey || undefined,
+      model: settingsStore.settings.selectedModel,
+      contextSize: settingsStore.settings.contextSize,
+      systemPrompt: (session.value?.systemPrompt || settingsStore.settings.systemPrompt) || undefined,
+      messages: allMessages.slice(0, -1),
+      tools: chatKeyReady.value ? toolStore.tools : [],
+      onToken(text, thinking) {
+        chatStore.updateMessage(sessionId, assistantId, { content: text, thinking: thinking || undefined, isStreaming: true });
+        scrollToBottom(false);
+      },
+      async onToolCall(toolCall) {
+        if (!activeTcMessage) {
+          activeTcMessage = { id: generateId(), role: 'tool', content: '', toolCalls: [], createdAt: new Date().toISOString() };
+          chatStore.addMessage(sessionId, activeTcMessage);
+        }
+        const existing = activeTcMessage.toolCalls?.find((tc) => tc.id === toolCall.id);
+        if (existing) { Object.assign(existing, toolCall); chatStore.persist(); }
+        else { activeTcMessage.toolCalls = [...(activeTcMessage.toolCalls ?? []), toolCall]; chatStore.updateMessage(sessionId, activeTcMessage.id, { toolCalls: activeTcMessage.toolCalls }); }
+        if (toolCall.status === 'success' || toolCall.status === 'error') {
+          activeTcMessage = null;
+          const nextAssistId = generateId();
+          chatStore.addMessage(sessionId, { id: nextAssistId, role: 'assistant', content: '', isStreaming: true, createdAt: new Date().toISOString() });
+          scrollToBottom(true);
+        }
+      },
+      onDone(finalContent, finalThinking) {
+        const last = [...chatStore.activeSession!.messages].reverse().find((m) => m.role === 'assistant' && m.isStreaming);
+        if (last) chatStore.updateMessage(sessionId, last.id, { content: finalContent, thinking: finalThinking || undefined, isStreaming: false });
+        scrollToBottom(true);
+      },
+      onError(err) {
+        chatStore.updateMessage(sessionId, assistantId, { isStreaming: false, error: err });
+        generationError.value = err;
+      },
+      onUsage(used) { usedTokens.value = used; },
+    });
+  }
+
+  /** Drag-to-resize chat sidebar */
+  function startSidebarResize(e: MouseEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth.value;
+    isResizing.value = true;
+
+    function onMove(ev: MouseEvent) {
+      sidebarWidth.value = Math.max(160, Math.min(420, startWidth + ev.clientX - startX));
+      localStorage.setItem('chat-sidebar-width', String(sidebarWidth.value));
+    }
+    function onUp() {
+      isResizing.value = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
   const filteredSessions = computed(() => {
     if (!linkToTenant.value || !tenantStore.selectedTenant) {
       return chatStore.sortedSessions;
@@ -234,15 +352,37 @@
       (s) => !s.tenantId || s.tenantId === tenantStore.selectedTenant!.id,
     );
   });
+
+  /** For each message index, determine whether it can be retried. */
+  const retryableIds = computed<Set<string>>(() => {
+    const set = new Set<string>();
+    const msgs = messages.value;
+    for (let i = 0; i < msgs.length - 1; i++) {
+      const next = msgs[i + 1];
+      if (msgs[i].role === 'user' && next?.error) {
+        set.add(msgs[i].id);
+      }
+    }
+    // Also allow retry on the last user message if the last message has an error or if generationError is set
+    const last = msgs[msgs.length - 1];
+    const secondToLast = msgs[msgs.length - 2];
+    if (secondToLast?.role === 'user' && last?.error) {
+      set.add(secondToLast.id);
+    }
+    return set;
+  });
 </script>
 
 <template>
   <AppLayout>
     <div class="chat-layout">
-      <div :class="['chat-sidebar', { 'sidebar-hidden': !sidebarOpen }]">
+      <div :class="['chat-sidebar', { 'sidebar-hidden': !sidebarOpen }]"
+        :style="sidebarOpen ? `width: ${sidebarWidth}px` : ''">
         <ChatSessionList :sessions="filteredSessions" :active-id="chatStore.activeSessionId"
           :active-tenant-id="tenantStore.selectedTenant?.id" @select="handleSelectSession" @delete="handleDeleteSession"
           @new="newChat" />
+        <!-- Drag-to-resize handle -->
+        <div v-if="sidebarOpen" class="resize-handle" @mousedown="startSidebarResize" />
       </div>
 
       <div class="chat-main">
@@ -260,6 +400,18 @@
           </div>
 
           <div class="topbar-right">
+            <!-- Session prompt override toggle -->
+            <button type="button" class="sidebar-toggle"
+              :class="{ 'prompt-btn-active': showSessionPrompt || !!session?.systemPrompt }"
+              :title="showSessionPrompt ? 'Hide session prompt' : 'Override system prompt for this session'"
+              @click="showSessionPrompt = !showSessionPrompt">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 20h9" stroke-linecap="round" />
+                <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" stroke-linecap="round"
+                  stroke-linejoin="round" />
+              </svg>
+            </button>
+
             <div class="tenant-link-toggle">
               <span class="toggle-label">Link to tenant</span>
               <AppToggle :model-value="linkToTenant" @update:model-value="linkToTenant = $event" />
@@ -267,7 +419,21 @@
           </div>
         </div>
 
-        <!-- AI tools safeguard: shown when tools exist but no MCP session yet -->
+        <!-- Per-session system prompt override -->
+        <div v-if="showSessionPrompt" class="session-prompt-bar">
+          <label class="session-prompt-label">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M8 10h8M8 14h5" stroke-linecap="round" />
+            </svg>
+            Session prompt
+            <span v-if="session?.systemPrompt" class="session-prompt-badge">overriding global</span>
+          </label>
+          <textarea :value="session?.systemPrompt ?? ''"
+            @input="session && chatStore.setSessionPrompt(session.id, ($event.target as HTMLTextAreaElement).value)"
+            placeholder="Override the global system prompt for this session only…" rows="2"
+            class="session-prompt-textarea" />
+        </div>
         <div v-if="!chatKeyReady && toolStore.tools.length > 0" class="tools-safeguard">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             class="shrink-0">
@@ -293,8 +459,15 @@
               d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
               stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-          <span>Ollama is not configured. <router-link to="/settings" class="warning-link">Open Settings</router-link>
-            to set up your server URL and model.</span>
+          <template v-if="settingsStore.settings.provider === 'ollama' || !settingsStore.settings.provider">
+            <span>Ollama is not configured. <router-link to="/settings" class="warning-link">Open Settings</router-link>
+              to set up your server URL and model.</span>
+          </template>
+          <template v-else>
+            <span>No model selected for {{ settingsStore.settings.provider.charAt(0).toUpperCase() +
+              settingsStore.settings.provider.slice(1) }}.
+              <router-link to="/settings" class="warning-link">Open Settings</router-link> to select a model.</span>
+          </template>
         </div>
 
         <div ref="messagesContainer" class="messages-area">
@@ -319,7 +492,8 @@
           </div>
 
           <div v-else class="messages-list">
-            <ChatMessage v-for="msg in messages" :key="msg.id" :message="msg" />
+            <ChatMessage v-for="msg in messages" :key="msg.id" :message="msg" :can-retry="retryableIds.has(msg.id)"
+              @retry="handleRetry" />
           </div>
         </div>
 
@@ -337,7 +511,10 @@
         </div>
 
         <div class="input-area">
-          <ChatInput :disabled="!isConfigured" :is-generating="isGenerating" @send="handleSend" @stop="stop" />
+          <ChatInput :disabled="!isConfigured" :is-generating="isGenerating"
+            :context-usage="usedTokens > 0 ? contextUsage : undefined"
+            :context-tokens="usedTokens > 0 ? usedTokens : undefined" :context-size="settingsStore.settings.contextSize"
+            @send="handleSend" @stop="stop" />
           <p class="input-hint">
             <span v-if="settingsStore.settings.selectedModel">{{ settingsStore.settings.selectedModel }}</span>
             <span v-else style="color: var(--color-warning-600)">No model selected</span>
@@ -368,6 +545,7 @@
     overflow: hidden;
     transition: width 0.2s ease, opacity 0.2s ease;
     background: var(--bg-sidebar);
+    position: relative;
   }
 
   .sidebar-hidden {
@@ -565,10 +743,39 @@
   .messages-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    max-width: 760px;
+    gap: 16px;
+    max-width: 860px;
     width: 100%;
     margin: 0 auto;
+  }
+
+  /* ── Resize handle ──────────────────────────────────────────── */
+  .resize-handle {
+    position: absolute;
+    top: 0;
+    right: -3px;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 5;
+  }
+
+  .resize-handle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 32px;
+    border-radius: 1px;
+    background: var(--border-default);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .resize-handle:hover::after {
+    opacity: 1;
   }
 
   .error-banner {
@@ -623,5 +830,67 @@
 
   .hint-sep {
     opacity: 0.4;
+  }
+
+  /* ── Session prompt bar ─────────────────────────────────── */
+  .prompt-btn-active {
+    color: var(--color-primary-500) !important;
+    background: color-mix(in srgb, var(--color-primary-500) 10%, transparent) !important;
+  }
+
+  .session-prompt-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 16px 10px;
+    border-bottom: 1px solid var(--border-default);
+    background: color-mix(in srgb, var(--color-primary-500) 3%, var(--bg-surface));
+    flex-shrink: 0;
+  }
+
+  .session-prompt-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .session-prompt-badge {
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
+    color: var(--color-primary-500);
+  }
+
+  .session-prompt-textarea {
+    width: 100%;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+
+  .session-prompt-textarea::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  .session-prompt-textarea:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
 </style>

@@ -1,11 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { Socket } from "socket.io-client";
-import {
-  connectDashboard,
-  disconnectDashboard,
-  getDashboardSocket,
-} from "@/api/socket";
+import { connectAll, disconnectAll, getSocket } from "@/api/socket";
 import { useToolStore } from "./tools";
 import { useStatusStore } from "./status";
 import { useEndpointStore } from "./endpoints";
@@ -16,24 +12,25 @@ export const useSocketStore = defineStore("socket", () => {
   const activeTenantId = ref<string | null>(null);
 
   function connect(token: string): void {
-    const socket = connectDashboard(token);
-    bindEvents(socket);
+    const { tenants, endpoints, tools } = connectAll(token);
+    bindEvents(tenants, endpoints, tools);
   }
 
-  function bindEvents(socket: Socket): void {
-    socket.on("connect", () => {
+  function bindEvents(tenants: Socket, endpoints: Socket, tools: Socket): void {
+    // Track connection state on the tenants socket (primary)
+    tenants.on("connect", () => {
       connected.value = true;
     });
-    socket.on("disconnect", () => {
+    tenants.on("disconnect", () => {
       connected.value = false;
     });
 
-    socket.on("tools_changed", (payload: { tools: Tool[]; count: number }) => {
+    tools.on("tools_changed", (payload: { tools: Tool[]; count: number }) => {
       const toolStore = useToolStore();
       toolStore.updateFromSocket(payload.tools, payload.count);
     });
 
-    socket.on(
+    endpoints.on(
       "connection_status",
       (payload: Partial<UpstreamStatus> & { endpointId: string }) => {
         const statusStore = useStatusStore();
@@ -53,23 +50,34 @@ export const useSocketStore = defineStore("socket", () => {
   }
 
   async function selectTenant(tenantId: string): Promise<void> {
-    const socket = getDashboardSocket();
-    if (!socket) return;
-
-    await new Promise<void>((resolve, reject) => {
-      socket.emit("selectTenant", { tenantId }, (res: { status: string }) => {
-        if (res.status === "success") {
-          activeTenantId.value = tenantId;
-          resolve();
-        } else {
-          reject(new Error("Failed to select tenant"));
-        }
-      });
-    });
+    // selectTenant must be called on every namespace so each socket joins
+    // the tenant room and subsequent broadcasts reach all of them.
+    const namespaces = ["tenants", "endpoints", "tools", "keys"];
+    await Promise.all(
+      namespaces.map(
+        (ns) =>
+          new Promise<void>((resolve, reject) => {
+            const socket = getSocket(ns);
+            if (!socket) return resolve();
+            socket.emit(
+              "selectTenant",
+              { tenantId },
+              (res: { status: string }) => {
+                if (res.status === "success") {
+                  activeTenantId.value = tenantId;
+                  resolve();
+                } else {
+                  reject(new Error(`Failed to select tenant on /${ns}`));
+                }
+              },
+            );
+          }),
+      ),
+    );
   }
 
   function disconnect(): void {
-    disconnectDashboard();
+    disconnectAll();
     connected.value = false;
     activeTenantId.value = null;
   }

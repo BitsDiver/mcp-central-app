@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { Endpoint } from "@/types";
-import { emit } from "@/api/socket";
+import { emitEndpoints } from "@/api/socket";
 import { useToastStore } from "./toast";
 
 export const useEndpointStore = defineStore("endpoints", () => {
@@ -11,7 +11,7 @@ export const useEndpointStore = defineStore("endpoints", () => {
   async function load(): Promise<void> {
     isLoading.value = true;
     try {
-      const res = await emit<{ endpoints: Endpoint[]; count: number }>(
+      const res = await emitEndpoints<{ endpoints: Endpoint[]; count: number }>(
         "listEndpoints",
         {},
       );
@@ -23,7 +23,10 @@ export const useEndpointStore = defineStore("endpoints", () => {
   }
 
   async function create(payload: Record<string, unknown>): Promise<Endpoint> {
-    const res = await emit<{ endpoint: Endpoint }>("createEndpoint", payload);
+    const res = await emitEndpoints<{ endpoint: Endpoint }>(
+      "createEndpoint",
+      payload,
+    );
     if (res.status === "error") throw new Error(res.message ?? res.code);
     const endpoint = res.data!.endpoint;
     endpoints.value.push(endpoint);
@@ -33,7 +36,7 @@ export const useEndpointStore = defineStore("endpoints", () => {
   }
 
   async function remove(id: string): Promise<void> {
-    const res = await emit("deleteEndpoint", { endpointId: id });
+    const res = await emitEndpoints("deleteEndpoint", { endpointId: id });
     if (res.status === "error") throw new Error(res.message ?? res.code);
     endpoints.value = endpoints.value.filter((e) => e.id !== id);
     const toast = useToastStore();
@@ -44,7 +47,7 @@ export const useEndpointStore = defineStore("endpoints", () => {
     id: string,
     payload: Record<string, unknown>,
   ): Promise<Endpoint> {
-    const res = await emit<{ endpoint: Endpoint }>("updateEndpoint", {
+    const res = await emitEndpoints<{ endpoint: Endpoint }>("updateEndpoint", {
       endpointId: id,
       ...payload,
     });
@@ -58,7 +61,10 @@ export const useEndpointStore = defineStore("endpoints", () => {
   }
 
   async function toggle(id: string, isEnabled: boolean): Promise<void> {
-    const res = await emit("toggleEndpoint", { endpointId: id, isEnabled });
+    const res = await emitEndpoints("toggleEndpoint", {
+      endpointId: id,
+      isEnabled,
+    });
     if (res.status === "error") throw new Error(res.message ?? res.code);
     const ep = endpoints.value.find((e) => e.id === id);
     if (ep) ep.isEnabled = isEnabled;
@@ -69,7 +75,7 @@ export const useEndpointStore = defineStore("endpoints", () => {
    * - re-discovers tools if already connected
    */
   async function refresh(id: string): Promise<void> {
-    const res = await emit("refreshEndpoint", { endpointId: id });
+    const res = await emitEndpoints("refreshEndpoint", { endpointId: id });
     if (res.status === "error") throw new Error(res.message ?? res.code);
   }
   function updateFromSocket(

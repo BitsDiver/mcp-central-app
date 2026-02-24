@@ -34,6 +34,9 @@ interface OllamaStreamChunk {
     tool_calls?: OllamaToolCall[];
     thinking?: string;
   };
+  /** Token usage — present on the final done:true chunk */
+  prompt_eval_count?: number;
+  eval_count?: number;
 }
 
 function parseThinking(content: string): { thinking: string; text: string } {
@@ -106,6 +109,7 @@ export function useOllama() {
 
   async function generate(opts: {
     ollamaUrl: string;
+    ollamaApiKey?: string;
     model: string;
     contextSize: number;
     systemPrompt?: string;
@@ -115,12 +119,15 @@ export function useOllama() {
     onToolCall: (toolCall: ChatToolCall) => Promise<void>;
     onDone: (finalContent: string, finalThinking: string) => void;
     onError: (err: string) => void;
+    /** Called whenever Ollama reports token usage (prompt + completion tokens used) */
+    onUsage?: (usedTokens: number) => void;
   }): Promise<void> {
     isGenerating.value = true;
     abortController.value = new AbortController();
 
     const {
       ollamaUrl,
+      ollamaApiKey,
       model,
       contextSize,
       systemPrompt,
@@ -130,6 +137,7 @@ export function useOllama() {
       onToolCall,
       onDone,
       onError,
+      onUsage,
     } = opts;
 
     try {
@@ -140,9 +148,14 @@ export function useOllama() {
         const ollMessages = messagesToOllama(loopMessages, systemPrompt);
         const ollTools = tools.length > 0 ? toolsToOllama(tools) : undefined;
 
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (ollamaApiKey) headers["Authorization"] = `Bearer ${ollamaApiKey}`;
+
         const res = await fetch(`${ollamaUrl}/api/chat`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           signal: abortController.value?.signal,
           body: JSON.stringify({
             model,
@@ -205,6 +218,11 @@ export function useOllama() {
             }
 
             if (chunk.done) {
+              // Report token usage from the final done chunk
+              const used =
+                (chunk.prompt_eval_count ?? 0) + (chunk.eval_count ?? 0);
+              if (used > 0) onUsage?.(used);
+
               if (pendingToolCalls.length > 0) {
                 continueLoop = true;
                 const toolResultMessages: ChatMessage[] = [];

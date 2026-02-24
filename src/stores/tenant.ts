@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import type { Tenant, ApiKey, NewApiKey } from "@/types";
 import { setupApi } from "@/api/client";
-import { emit } from "@/api/socket";
+import { emitTenants, emitKeys } from "@/api/socket";
 import { useToastStore } from "./toast";
 
 const STORAGE_KEY = "mcp_selected_tenant_id";
@@ -62,7 +62,10 @@ export const useTenantStore = defineStore("tenant", () => {
    * Requires the socket to be connected and a tenant selected on the socket session.
    */
   async function loadKeys(): Promise<void> {
-    const res = await emit<{ keys: ApiKey[]; count: number }>("listKeys", {});
+    const res = await emitKeys<{ keys: ApiKey[]; count: number }>(
+      "listKeys",
+      {},
+    );
     if (res.status === "error") throw new Error(res.message ?? res.code);
     apiKeys.value = res.data!.keys;
   }
@@ -86,7 +89,7 @@ export const useTenantStore = defineStore("tenant", () => {
   }
 
   async function createKey(label: string): Promise<NewApiKey> {
-    const res = await emit<NewApiKey>("createKey", { label });
+    const res = await emitKeys<NewApiKey>("createKey", { label });
     if (res.status === "error") throw new Error(res.message ?? res.code);
     const newKey = res.data as unknown as NewApiKey;
     await loadKeys();
@@ -94,7 +97,7 @@ export const useTenantStore = defineStore("tenant", () => {
   }
 
   async function revokeKey(id: string): Promise<void> {
-    const res = await emit("revokeKey", { keyId: id });
+    const res = await emitKeys("revokeKey", { keyId: id });
     if (res.status === "error") throw new Error(res.message ?? res.code);
     apiKeys.value = apiKeys.value.filter((k) => k.id !== id);
     if (selectedKeyId.value === id) {
@@ -105,7 +108,7 @@ export const useTenantStore = defineStore("tenant", () => {
   }
 
   async function regenerateKey(id: string): Promise<NewApiKey> {
-    const res = await emit<NewApiKey>("regenerateKey", { keyId: id });
+    const res = await emitKeys<NewApiKey>("regenerateKey", { keyId: id });
     if (res.status === "error") throw new Error(res.message ?? res.code);
     const newKey = res.data as unknown as NewApiKey;
     await loadKeys();
@@ -119,7 +122,7 @@ export const useTenantStore = defineStore("tenant", () => {
    * appropriately after this call.
    */
   async function deleteTenant(tenantId: string): Promise<void> {
-    const res = await emit("deleteTenant", { tenantId });
+    const res = await emitTenants("deleteTenant", { tenantId });
     if (res.status === "error") throw new Error(res.message ?? res.code);
     tenants.value = tenants.value.filter((t) => t.id !== tenantId);
     if (selectedTenant.value?.id === tenantId) {

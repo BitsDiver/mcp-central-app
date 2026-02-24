@@ -417,7 +417,7 @@ body {
   padding: 1px 5px;
 }
 
-.bubble-user .markdown-body code {
+.bubble--user .markdown-body code {
   background: rgba(255, 255, 255, 0.2);
   border-color: rgba(255, 255, 255, 0.3);
 }
@@ -439,7 +439,7 @@ body {
   line-height: 1.5;
 }
 
-.bubble-user .markdown-body pre {
+.bubble--user .markdown-body pre {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.2);
 }

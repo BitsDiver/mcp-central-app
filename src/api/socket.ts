@@ -3,7 +3,9 @@ import type { SocketResponse } from "@/types";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
-let dashboardSocket: Socket | null = null;
+/** Active sockets indexed by namespace name */
+const sockets: Partial<Record<string, Socket>> = {};
+
 let i18nSocket: Socket | null = null;
 let usersSocket: Socket | null = null;
 
@@ -37,34 +39,85 @@ function waitForSocket(timeoutMs = 15_000): Promise<void> {
   });
 }
 
-export function connectDashboard(token: string): Socket {
-  if (dashboardSocket?.connected) {
-    return dashboardSocket;
-  }
+// ── Generic socket factory ──────────────────────────────────────
 
-  dashboardSocket?.disconnect();
-
-  dashboardSocket = io(`${BASE_URL}/dashboard`, {
+function makeAuthSocket(namespace: string, token: string): Socket {
+  sockets[namespace]?.disconnect();
+  const socket = io(`${BASE_URL}/${namespace}`, {
     auth: { token },
     transports: ["websocket"],
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionAttempts: 5,
   });
-
-  return dashboardSocket;
+  sockets[namespace] = socket;
+  return socket;
 }
 
-export function getDashboardSocket(): Socket | null {
-  return dashboardSocket;
+/** Connect all domain namespaces at once. */
+export function connectAll(token: string): {
+  tenants: Socket;
+  endpoints: Socket;
+  tools: Socket;
+  keys: Socket;
+  chat: Socket;
+} {
+  return {
+    tenants: makeAuthSocket("tenants", token),
+    endpoints: makeAuthSocket("endpoints", token),
+    tools: makeAuthSocket("tools", token),
+    keys: makeAuthSocket("keys", token),
+    chat: makeAuthSocket("chat", token),
+  };
 }
 
-export function disconnectDashboard(): void {
-  dashboardSocket?.disconnect();
-  dashboardSocket = null;
+export function disconnectAll(): void {
+  ["tenants", "endpoints", "tools", "keys", "chat"].forEach((ns) => {
+    sockets[ns]?.disconnect();
+    delete sockets[ns];
+  });
   resetSocketReady();
 }
 
+export function getSocket(namespace: string): Socket | null {
+  return sockets[namespace] ?? null;
+}
+
+// ── Namespace-specific emit factories ─────────────────────────────
+
+function makeEmit(namespace: string) {
+  return function emit<T = unknown>(
+    event: string,
+    payload: Record<string, unknown> = {},
+  ): Promise<SocketResponse<T>> {
+    return new Promise((resolve, reject) => {
+      if (!_socketReady) {
+        waitForSocket()
+          .then(() =>
+            makeEmit(namespace)<T>(event, payload).then(resolve, reject),
+          )
+          .catch(reject);
+        return;
+      }
+      const socket = sockets[namespace];
+      if (!socket?.connected) {
+        reject(new Error(`Socket /${namespace} not connected`));
+        return;
+      }
+      socket.emit(event, payload, (response: SocketResponse<T>) => {
+        resolve(response);
+      });
+    });
+  };
+}
+
+export const emitTenants = makeEmit("tenants");
+export const emitEndpoints = makeEmit("endpoints");
+export const emitTools = makeEmit("tools");
+export const emitKeys = makeEmit("keys");
+export const emitChat = makeEmit("chat");
+
+// ── i18n socket (/i18n namespace — public) ───────────────────────────
 export function getI18nSocket(): Socket {
   if (!i18nSocket) {
     i18nSocket = io(`${BASE_URL}/i18n`, {
@@ -73,29 +126,6 @@ export function getI18nSocket(): Socket {
     });
   }
   return i18nSocket;
-}
-
-export function emit<T = unknown>(
-  event: string,
-  payload: Record<string, unknown> = {},
-): Promise<SocketResponse<T>> {
-  return new Promise((resolve, reject) => {
-    // If socket is not yet ready (e.g. page reload before App.vue finishes init),
-    // queue this call until markSocketReady() is called.
-    if (!_socketReady) {
-      waitForSocket()
-        .then(() => emit<T>(event, payload).then(resolve, reject))
-        .catch(reject);
-      return;
-    }
-    if (!dashboardSocket?.connected) {
-      reject(new Error("Socket not connected"));
-      return;
-    }
-    dashboardSocket.emit(event, payload, (response: SocketResponse<T>) => {
-      resolve(response);
-    });
-  });
 }
 
 // ── Users socket (/users namespace — admin only) ──────────────────────────

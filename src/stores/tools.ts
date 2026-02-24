@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { Tool } from "@/types";
-import { emit } from "@/api/socket";
+import { emitTools } from "@/api/socket";
 
 export const useToolStore = defineStore("tools", () => {
   const tools = ref<Tool[]>([]);
@@ -11,7 +11,10 @@ export const useToolStore = defineStore("tools", () => {
   async function load(): Promise<void> {
     isLoading.value = true;
     try {
-      const res = await emit<{ tools: Tool[]; count: number }>("getTools", {});
+      const res = await emitTools<{ tools: Tool[]; count: number }>(
+        "getTools",
+        {},
+      );
       if (res.status === "error") throw new Error(res.message ?? res.code);
       tools.value = res.data!.tools;
       count.value = res.data!.count;

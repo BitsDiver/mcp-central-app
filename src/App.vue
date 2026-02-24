@@ -33,10 +33,14 @@
 
     if (authed) {
       try {
-        // Purge any chat keys left from a previous login session.
-        // If the Auth0 session expired, those keys may have been revoked on logout;
-        // clearing localStorage ensures the chat safeguard is shown fresh.
-        purgeAllChatKeys();
+        // Purge chat keys only on a genuine new login (not on page refresh / silent
+        // token renewal). sessionStorage is cleared when the browser tab closes or
+        // after an explicit logout, so it correctly distinguishes the two cases.
+        const alreadyInitialized = sessionStorage.getItem('app-session-init');
+        if (!alreadyInitialized) {
+          purgeAllChatKeys();
+          sessionStorage.setItem('app-session-init', '1');
+        }
 
         const token = await getAccessTokenSilently();
         authStore.setToken(token);
@@ -93,6 +97,9 @@
       await revokeAllChatKeys().catch(() => { });
       resetMcpSession();
       resetSocketReady();
+      // Clear the session flag so the next login triggers a fresh purge of any
+      // keys that may not have been properly revoked (e.g. network failure).
+      sessionStorage.removeItem('app-session-init');
       if (router.currentRoute.value.meta.requiresAuth) {
         await router.push('/');
       }

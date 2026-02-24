@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import type { UpstreamStatus } from "@/types";
-import { emit } from "@/api/socket";
+import { emitEndpoints } from "@/api/socket";
 
 export const useStatusStore = defineStore("status", () => {
   const upstreams = ref<UpstreamStatus[]>([]);
@@ -18,7 +18,7 @@ export const useStatusStore = defineStore("status", () => {
   async function load(): Promise<void> {
     isLoading.value = true;
     try {
-      const res = await emit<{
+      const res = await emitEndpoints<{
         upstreams: UpstreamStatus[];
         totalTools: number;
       }>("getStatus", {});
