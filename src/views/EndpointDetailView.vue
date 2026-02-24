@@ -145,77 +145,59 @@
       </div>
 
       <template v-else>
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div>
-            <h1 class="text-xl font-semibold" style="color: var(--text-primary);">{{ endpoint.name }}</h1>
-            <div class="flex items-center gap-2 mt-1">
-              <code class="text-xs px-1.5 py-0.5 rounded font-mono"
-                style="background: var(--bg-muted); color: var(--text-secondary);">{{ endpoint.namespace }}</code>
-              <StatusBadge :status="status" />
+        <!-- Endpoint detail card -->
+        <div class="card overflow-hidden mb-6">
+          <!-- Header: name, tags, actions -->
+          <div class="px-6 py-5 flex flex-col sm:flex-row sm:items-start gap-4">
+            <div class="flex-1 min-w-0">
+              <h1 class="text-xl font-semibold mb-2.5" style="color: var(--text-primary);">{{ endpoint.name }}</h1>
+              <div class="flex items-center gap-2 flex-wrap">
+                <code class="text-[11px] font-mono font-medium px-2 py-0.5 rounded-md"
+                  style="background: var(--bg-muted); color: var(--text-secondary);">{{ endpoint.namespace }}</code>
+                <span class="text-[11px] font-medium px-2 py-0.5 rounded-md"
+                  style="background: var(--bg-muted); color: var(--text-secondary);">{{ endpoint.transport }}</span>
+                <StatusBadge :status="status" />
+              </div>
+              <!-- Connection target -->
+              <div v-if="endpoint.url" class="mt-3.5">
+                <p class="text-[10px] uppercase tracking-wide font-semibold mb-1" style="color: var(--text-tertiary);">
+                  URL</p>
+                <code class="text-xs font-mono break-all leading-relaxed"
+                  style="color: var(--text-secondary);">{{ endpoint.url }}</code>
+              </div>
+              <div v-if="endpoint.command" class="mt-3.5">
+                <p class="text-[10px] uppercase tracking-wide font-semibold mb-1" style="color: var(--text-tertiary);">
+                  Command</p>
+                <code class="text-xs font-mono"
+                  style="color: var(--text-secondary);">{{ endpoint.command }}{{ endpoint.args?.length ? ' ' + endpoint.args.join(' ') : '' }}</code>
+              </div>
+            </div>
+            <!-- Actions -->
+            <div class="flex items-center gap-2 shrink-0 pt-0.5">
+              <AppToggle :model-value="endpoint.isEnabled" @update:model-value="handleToggle"
+                :label="endpoint.isEnabled ? 'Enabled' : 'Disabled'" />
+              <AppButton variant="danger" size="sm" @click="showDeleteDialog = true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                </svg>
+                Remove
+              </AppButton>
             </div>
           </div>
-          <div class="flex items-center gap-2">
-            <AppToggle :model-value="endpoint.isEnabled" @update:model-value="handleToggle"
-              :label="endpoint.isEnabled ? 'Enabled' : 'Disabled'" />
-            <AppButton variant="danger" size="sm" @click="showDeleteDialog = true">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 6h18M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-              </svg>
-              Remove
-            </AppButton>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <div class="card p-5">
-            <h2 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color: var(--text-tertiary);">
-              Connection</h2>
-            <dl class="flex flex-col gap-2.5">
-              <div class="flex justify-between text-sm">
-                <dt style="color: var(--text-secondary);">Transport</dt>
-                <dd class="font-medium" style="color: var(--text-primary);">{{ endpoint.transport }}</dd>
-              </div>
-              <div v-if="endpoint.url" class="flex justify-between text-sm gap-4">
-                <dt style="color: var(--text-secondary);">URL</dt>
-                <dd class="font-medium truncate font-mono text-xs" style="color: var(--text-primary);">{{ endpoint.url
-                  }}</dd>
-              </div>
-              <div v-if="endpoint.command" class="flex justify-between text-sm">
-                <dt style="color: var(--text-secondary);">Command</dt>
-                <dd class="font-medium font-mono text-xs" style="color: var(--text-primary);">{{ endpoint.command }}
-                </dd>
-              </div>
-              <div v-if="endpoint.args?.length" class="flex justify-between text-sm">
-                <dt style="color: var(--text-secondary);">Args</dt>
-                <dd class="font-mono text-xs" style="color: var(--text-primary);">{{ endpoint.args.join(' ') }}</dd>
-              </div>
-            </dl>
-          </div>
-
-          <div class="card p-5">
-            <h2 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color: var(--text-tertiary);">
-              Metadata</h2>
-            <dl class="flex flex-col gap-2.5">
-              <div class="flex justify-between text-sm">
-                <dt style="color: var(--text-secondary);">Status</dt>
-                <dd>
-                  <StatusBadge :status="status" />
-                </dd>
-              </div>
-              <div class="flex justify-between text-sm">
-                <dt style="color: var(--text-secondary);">Tool count</dt>
-                <dd class="font-medium" style="color: var(--text-primary);">{{ endpoint.toolCount }}</dd>
-              </div>
-              <div class="flex justify-between text-sm">
-                <dt style="color: var(--text-secondary);">Last connected</dt>
-                <dd class="font-medium" style="color: var(--text-primary);">{{ formatDate(endpoint.lastConnectedAt) }}
-                </dd>
-              </div>
-              <div class="flex justify-between text-sm">
-                <dt style="color: var(--text-secondary);">Created</dt>
-                <dd style="color: var(--text-primary);">{{ formatDate(endpoint.createdAt) }}</dd>
-              </div>
-            </dl>
+          <!-- Meta strip -->
+          <div class="px-6 py-3 border-t flex flex-wrap gap-x-8 gap-y-2"
+            style="background: var(--bg-muted); border-color: var(--border-default);">
+            <div>
+              <p class="text-[10px] uppercase tracking-wide font-semibold" style="color: var(--text-tertiary);">Last
+                connected</p>
+              <p class="text-sm mt-0.5" style="color: var(--text-primary);">{{ formatDate(endpoint.lastConnectedAt) }}
+              </p>
+            </div>
+            <div>
+              <p class="text-[10px] uppercase tracking-wide font-semibold" style="color: var(--text-tertiary);">Created
+              </p>
+              <p class="text-sm mt-0.5" style="color: var(--text-primary);">{{ formatDate(endpoint.createdAt) }}</p>
+            </div>
           </div>
         </div>
 

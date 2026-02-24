@@ -104,6 +104,14 @@ export const useTenantStore = defineStore("tenant", () => {
     toast.success("API key revoked.");
   }
 
+  async function regenerateKey(id: string): Promise<NewApiKey> {
+    const res = await emit<NewApiKey>("regenerateKey", { keyId: id });
+    if (res.status === "error") throw new Error(res.message ?? res.code);
+    const newKey = res.data as unknown as NewApiKey;
+    await loadKeys();
+    return newKey;
+  }
+
   /**
    * Delete a tenant and all its data. Removes it from the local list.
    * If the deleted tenant was the active one, `selectedTenant` is set to
@@ -146,6 +154,7 @@ export const useTenantStore = defineStore("tenant", () => {
     createTenant,
     createKey,
     revokeKey,
+    regenerateKey,
     deleteTenant,
     resolveInitialTenant,
     clear,
