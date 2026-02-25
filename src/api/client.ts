@@ -1,4 +1,5 @@
 import type { ApiError } from "@/types";
+import type { RegistryServer } from "@/data/mcpRegistry";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
@@ -44,4 +45,11 @@ export const setupApi = {
       method: "POST",
       body: JSON.stringify({ name }),
     }),
+};
+
+export const registryApi = {
+  getServers: () =>
+    request<{ categories: string[]; servers: RegistryServer[]; count: number }>(
+      "/registry/servers",
+    ),
 };
