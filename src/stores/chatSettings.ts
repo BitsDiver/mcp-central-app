@@ -39,7 +39,19 @@ function loadFromStorage(): ChatSettings {
 // Per-provider default models (shown when no model is selected yet)
 export const PROVIDER_DEFAULT_MODELS: Record<LLMProvider, string[]> = {
   ollama: [],
-  openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"],
+  // ── OpenAI ── https://platform.openai.com/docs/models
+  // gpt-4.1-mini is available on the free tier (as of 2025)
+  openai: [
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+    "gpt-4o",
+    "gpt-4o-mini",
+    "o3",
+    "o4-mini",
+  ],
+  // ── Anthropic ── https://docs.anthropic.com/en/docs/about-claude/models
+  // Use the versioned API identifiers; "latest" aliases are also accepted
   anthropic: [
     "claude-opus-4-5",
     "claude-sonnet-4-5",
@@ -48,6 +60,7 @@ export const PROVIDER_DEFAULT_MODELS: Record<LLMProvider, string[]> = {
     "claude-sonnet-4",
     "claude-3-5-haiku-latest",
   ],
+  // ── Google Gemini ── https://ai.google.dev/gemini-api/docs/models
   gemini: [
     "gemini-2.5-pro",
     "gemini-2.5-flash",
@@ -56,6 +69,34 @@ export const PROVIDER_DEFAULT_MODELS: Record<LLMProvider, string[]> = {
     "gemini-1.5-flash",
   ],
 };
+
+/** Max context window (tokens) per known model — drives the UI slider max value. */
+export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
+  // OpenAI – https://platform.openai.com/docs/models
+  "gpt-4.1": 1_047_576,
+  "gpt-4.1-mini": 1_047_576,
+  "gpt-4.1-nano": 1_047_576,
+  "gpt-4o": 128_000,
+  "gpt-4o-mini": 128_000,
+  o3: 200_000,
+  "o4-mini": 200_000,
+  // Anthropic – https://docs.anthropic.com/en/docs/about-claude/models
+  "claude-opus-4-5": 200_000,
+  "claude-sonnet-4-5": 200_000,
+  "claude-haiku-3-5": 200_000,
+  "claude-opus-4": 200_000,
+  "claude-sonnet-4": 200_000,
+  "claude-3-5-haiku-latest": 200_000,
+  // Google Gemini – https://ai.google.dev/gemini-api/docs/models
+  "gemini-2.5-pro": 1_048_576,
+  "gemini-2.5-flash": 1_048_576,
+  "gemini-2.0-flash": 1_048_576,
+  "gemini-1.5-pro": 2_097_152,
+  "gemini-1.5-flash": 1_048_576,
+};
+
+/** Fallback max for Ollama / custom models when the model isn't in MODEL_CONTEXT_LIMITS (128 k). */
+export const DEFAULT_MAX_CONTEXT = 131_072;
 
 export const useChatSettingsStore = defineStore("chatSettings", () => {
   const settings = ref<ChatSettings>(loadFromStorage());

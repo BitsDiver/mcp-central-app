@@ -41,15 +41,6 @@
 
   <!-- User / assistant messages -->
   <div v-else :class="['msg-row', isUser ? 'msg-row--user' : 'msg-row--assistant']">
-    <!-- Avatar (assistant only) -->
-    <div v-if="!isUser" class="assistant-avatar">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path
-          d="M9 3H7a2 2 0 00-2 2v2M9 3h6M9 3V1m6 2h2a2 2 0 012 2v2m0 0h2m-2 0v6m2 0h-2m0 0v2a2 2 0 01-2 2h-2m0 0H9m6 0v2m-6-2H7a2 2 0 01-2-2v-2M5 11H3m2 0V9M3 13h2m13-2h2m-2 2h2M9 21h6m-6 0v-2m6 2v-2M9 9h6v6H9V9z"
-          stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-    </div>
-
     <div class="msg-body">
       <!-- Attachments -->
       <div v-if="hasAttachments" class="attachment-list">
@@ -67,15 +58,21 @@
         </div>
       </div>
 
-      <!-- Bubble -->
-      <div :class="['bubble', isUser ? 'bubble--user' : 'bubble--assistant', isError ? 'bubble--error' : '']">
-        <ThinkingBlock v-if="hasThinking || (message.isStreaming && !message.content && !isUser)"
+      <!-- User bubble (neutral card) -->
+      <div v-if="isUser" class="bubble bubble--user">
+        <div class="markdown-body user-markdown" v-html="renderMarkdown(message.content)" />
+        <p class="msg-time">{{ formattedTime }}</p>
+      </div>
+
+      <!-- Assistant area: no bubble, just flowing content -->
+      <div v-else class="assistant-content" :class="{ 'assistant-content--error': isError }">
+        <ThinkingBlock v-if="hasThinking || (message.isStreaming && !message.content)"
           :content="message.thinking ?? ''" />
 
         <!-- Error state -->
-        <div v-if="isError" class="error-content">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            class="shrink-0">
+        <div v-if="isError" class="error-inline">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            class="shrink-0" style="margin-top:1px">
             <circle cx="12" cy="12" r="10" />
             <path d="M12 8v4M12 16h.01" stroke-linecap="round" />
           </svg>
@@ -84,11 +81,8 @@
 
         <!-- Normal content -->
         <template v-else-if="hasContent">
-          <div v-if="isUser" class="markdown-body user-markdown" v-html="renderMarkdown(message.content)" />
-          <div v-else>
-            <div class="markdown-body assistant-markdown" v-html="renderMarkdown(message.content)" />
-            <span v-if="message.isStreaming" class="streaming-cursor" />
-          </div>
+          <div class="markdown-body assistant-markdown" v-html="renderMarkdown(message.content)" />
+          <span v-if="message.isStreaming" class="streaming-cursor" />
         </template>
 
         <!-- Loading dots -->
@@ -141,28 +135,6 @@
 
   .msg-row--assistant {
     flex-direction: row;
-    align-items: flex-start;
-  }
-
-  /* ── Avatar ───────────────────────────────────────────────────── */
-  .assistant-avatar {
-    width: 28px;
-    height: 28px;
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--color-primary-500) 10%, var(--bg-surface));
-    color: var(--color-primary-500);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    margin-top: 3px;
-    border: 1px solid color-mix(in srgb, var(--color-primary-500) 18%, transparent);
-  }
-
-  [data-theme="dark"] .assistant-avatar {
-    background: rgba(59, 130, 246, 0.12);
-    color: var(--color-primary-400);
-    border-color: rgba(59, 130, 246, 0.2);
   }
 
   /* ── Body column ──────────────────────────────────────────────── */
@@ -177,57 +149,54 @@
     align-items: flex-end;
   }
 
-  /* ── Bubbles ──────────────────────────────────────────────────── */
+  /* ── User bubble (neutral card, right-aligned) ───────────────── */
   .bubble {
-    padding: 10px 14px;
-    border-radius: 14px;
-    position: relative;
+    padding: 9px 13px;
+    border-radius: 12px;
     font-size: 14px;
     line-height: 1.65;
   }
 
   .bubble--user {
-    background: var(--color-primary-500);
-    color: white;
+    background: var(--bg-muted);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
     border-bottom-right-radius: 4px;
+    max-width: min(560px, 100%);
   }
 
   [data-theme="dark"] .bubble--user {
-    background: var(--color-primary-600, #2563eb);
+    background: #2a2d35;
+    border-color: #3a3d45;
   }
 
-  .bubble--assistant {
-    background: var(--bg-surface);
-    border: 1px solid var(--border-default);
-    border-bottom-left-radius: 4px;
+  /* ── Assistant content (no bubble, plain text) ────────────────── */
+  .assistant-content {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    line-height: 1.7;
     color: var(--text-primary);
+    padding: 2px 0;
   }
 
-  [data-theme="dark"] .bubble--assistant {
-    background: var(--bg-card);
-  }
-
-  .bubble--error.bubble--assistant {
-    background: var(--color-danger-50, #fef2f2);
-    border-color: var(--color-danger-200, #fecaca);
-    color: var(--color-danger-700, #b91c1c);
-  }
-
-  [data-theme="dark"] .bubble--error.bubble--assistant {
-    background: rgba(239, 68, 68, 0.08);
-    border-color: rgba(239, 68, 68, 0.2);
-    color: var(--color-danger-400, #f87171);
-  }
-
-  .error-content {
-    display: flex;
+  /* Error inline chip */
+  .error-inline {
+    display: inline-flex;
     align-items: flex-start;
-    gap: 8px;
+    gap: 7px;
     font-size: 13px;
+    background: var(--color-danger-50, #fef2f2);
+    border: 1px solid var(--color-danger-200, #fecaca);
+    color: var(--color-danger-700, #b91c1c);
+    border-radius: var(--radius-md);
+    padding: 7px 11px;
   }
 
-  .error-content svg {
-    margin-top: 1px;
+  [data-theme="dark"] .error-inline {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.22);
+    color: var(--color-danger-400, #f87171);
   }
 
   /* ── Attachments ──────────────────────────────────────────────── */
@@ -248,11 +217,15 @@
     font-size: 11px;
   }
 
-  .bubble--assistant .attachment-item {
-    background: var(--bg-muted);
+  .bubble--user .attachment-item {
+    background: rgba(0, 0, 0, 0.06);
   }
 
-  .attachment-image {
+  [data-theme="dark"] .bubble--user .attachment-item {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .assistant-content .attachment-item {
     max-width: 200px;
     max-height: 150px;
     border-radius: var(--radius-sm);
@@ -264,6 +237,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* ── Markdown body overrides (user bubble) ──────────────── */
+  .user-markdown {
+    font-size: 14px;
+    color: var(--text-primary);
   }
 
   /* ── Timestamp ────────────────────────────────────────────────── */

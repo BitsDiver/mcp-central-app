@@ -227,10 +227,8 @@
       },
 
       onError(err) {
-        // Inject the error directly into the message stream for traceability
+        // Inject the error directly into the message stream — no redundant banner needed
         chatStore.updateMessage(sessionId, assistantId, { isStreaming: false, error: err });
-        // Also keep the banner for visibility
-        generationError.value = err;
       },
 
       onUsage(used) {
@@ -497,6 +495,7 @@
           </div>
         </div>
 
+        <!-- generationError banner kept only for tool-init errors (not LLM stream errors which are inline) -->
         <div v-if="generationError" class="error-banner">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10" />

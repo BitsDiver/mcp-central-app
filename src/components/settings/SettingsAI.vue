@@ -1,7 +1,6 @@
 <script setup lang="ts">
     import { ref, computed, onMounted, watch } from 'vue';
-    import AppInput from '@/components/ui/AppInput.vue';
-    import { useChatSettingsStore, PROVIDER_DEFAULT_MODELS } from '@/stores/chatSettings';
+    import { useChatSettingsStore, PROVIDER_DEFAULT_MODELS, MODEL_CONTEXT_LIMITS, DEFAULT_MAX_CONTEXT } from '@/stores/chatSettings';
     import { useAiKeysStore } from '@/stores/aiKeys';
     import type { LLMProvider } from '@/types';
 
@@ -126,6 +125,37 @@
         const gb = bytes / 1073741824;
         return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / 1048576).toFixed(0)} MB`;
     }
+
+    // ── Context window slider (log scale) ────────────────────────────────────────
+    const MIN_CTX = 1024;
+
+    /** Max tokens for the currently selected model (or fallback for Ollama/custom). */
+    const maxContextSize = computed(() => MODEL_CONTEXT_LIMITS[draftModel.value] ?? DEFAULT_MAX_CONTEXT);
+
+    /** Format a token count in French locale, e.g. 32 768 tokens. */
+    function fmtTokens(n: number): string {
+        return new Intl.NumberFormat('fr-FR').format(n) + '\u202ftokens';
+    }
+
+    function _sliderToTokens(pos: number, max: number): number {
+        const t = pos / 1000;
+        return Math.round(Math.exp(Math.log(MIN_CTX) + t * (Math.log(max) - Math.log(MIN_CTX))));
+    }
+
+    function _tokensToSlider(tokens: number, max: number): number {
+        const clamped = Math.max(MIN_CTX, Math.min(tokens, max));
+        return Math.round(((Math.log(clamped) - Math.log(MIN_CTX)) / (Math.log(max) - Math.log(MIN_CTX))) * 1000);
+    }
+
+    const sliderPosition = computed({
+        get: () => _tokensToSlider(draftContextSize.value, maxContextSize.value),
+        set: (pos: number) => { draftContextSize.value = _sliderToTokens(pos, maxContextSize.value); },
+    });
+
+    // Clamp stored value when the model changes to a smaller context window
+    watch(maxContextSize, (max) => {
+        if (draftContextSize.value > max) draftContextSize.value = max;
+    });
 </script>
 
 <template>
@@ -323,9 +353,29 @@
 
             <!-- ══ Shared settings ═════════════════════════════════════════════ -->
 
-            <AppInput id="context-size" label="Context window size" type="number"
-                :model-value="String(draftContextSize)" @update:model-value="draftContextSize = Number($event)"
-                hint="Max tokens kept in context (e.g. 4096, 8192, 32768)" placeholder="8192" />
+            <!-- ── Context window slider ───────────────────────────────────── -->
+            <div class="flex flex-col gap-2">
+                <div class="flex items-baseline justify-between">
+                    <label for="context-slider" class="text-sm font-medium" style="color: var(--text-primary);">Fenêtre
+                        de
+                        contexte</label>
+                    <span class="text-sm font-semibold tabular-nums" style="color: var(--color-primary);">{{
+                        fmtTokens(draftContextSize) }}</span>
+                </div>
+                <input id="context-slider" type="range" min="0" max="1000" :value="sliderPosition"
+                    @input="sliderPosition = Number(($event.target as HTMLInputElement).value)"
+                    class="w-full h-2 rounded-full cursor-pointer appearance-none"
+                    style="accent-color: var(--color-primary);" />
+                <p class="text-xs" style="color: var(--text-tertiary);">
+                    <template v-if="draftModel && MODEL_CONTEXT_LIMITS[draftModel]">
+                        Maximum pour <strong class="font-medium" style="color: var(--text-secondary);">{{ draftModel
+                            }}</strong> : {{ fmtTokens(maxContextSize) }}
+                    </template>
+                    <template v-else>
+                        Maximum (par défaut) : {{ fmtTokens(maxContextSize) }}
+                    </template>
+                </p>
+            </div>
 
             <div class="flex flex-col gap-1.5">
                 <label class="text-sm font-medium" style="color: var(--text-primary);">

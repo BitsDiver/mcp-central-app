@@ -9,7 +9,7 @@
   import AppToggle from '@/components/ui/AppToggle.vue';
   import { useEndpointStore } from '@/stores/endpoints';
   import { useStatusStore } from '@/stores/status';
-  import { emit } from '@/api/socket';
+  import { emitTools } from '@/api/socket';
   import type { EndpointStatus, Tool } from '@/types';
 
   const route = useRoute();
@@ -20,6 +20,7 @@
   const endpointId = route.params.id as string;
   const tools = ref<Tool[]>([]);
   const loadingTools = ref(false);
+  const toolsError = ref<string | null>(null);
   const showDeleteDialog = ref(false);
   const deleting = ref(false);
 
@@ -34,10 +35,16 @@
   onMounted(async () => {
     if (!endpoint.value) await endpointStore.load();
     loadingTools.value = true;
+    toolsError.value = null;
     try {
-      const res = await emit<{ tools: Tool[]; count: number; }>('getEndpointTools', { endpointId });
-      if (res.status === 'error') throw new Error(res.message ?? res.code);
-      tools.value = res.data!.tools;
+      const res = await emitTools<{ tools: Tool[]; count: number; }>('getEndpointTools', { endpointId });
+      if (res.status === 'error') {
+        toolsError.value = res.message ?? res.code ?? 'Could not load tools';
+      } else {
+        tools.value = res.data!.tools;
+      }
+    } catch (e) {
+      toolsError.value = e instanceof Error ? e.message : String(e);
     } finally {
       loadingTools.value = false;
     }
@@ -224,6 +231,12 @@
             <SkeletonBlock height="0.875rem" width="35%" />
             <SkeletonBlock height="0.75rem" width="65%" />
           </div>
+        </div>
+
+        <!-- Error state -->
+        <div v-else-if="toolsError" class="py-10 text-center">
+          <p class="text-sm font-medium mb-1" style="color: var(--color-danger, #ef4444);">Failed to load tools</p>
+          <p class="text-xs" style="color: var(--text-tertiary);">{{ toolsError }}</p>
         </div>
 
         <!-- Empty state -->
