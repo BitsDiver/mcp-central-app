@@ -1,18 +1,18 @@
 # ──────────────────────────────────────────────────────────────
-# mcp-central — Frontend release
+# mcp-central-app — Frontend release
 #
-# Triggers on every push to `main`.
+# Triggers when a version tag (v*) is pushed.
 # Builds the Vite app and publishes the `dist/` folder as a
 # tarball attached to a rolling GitHub release (tag: frontend-latest).
-# The backend CI pulls this artifact to embed the UI in its image.
+# The backend CI pulls this artifact to embed the UI in its Docker image.
 # ──────────────────────────────────────────────────────────────
 
 name: Release frontend
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -56,9 +56,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: frontend-latest
-          name: "Frontend — latest build"
+          name: "Frontend — latest build (${{ github.ref_name }})"
           prerelease: true
           body: |
-            Automated build from commit ${{ github.sha }}.
-            Published on ${{ github.event.head_commit.timestamp }}.
+            Built from tag **${{ github.ref_name }}** (commit `${{ github.sha }}`).
           files: dist.tar.gz
