@@ -1,0 +1,309 @@
+# MCP Central App — Project Context for AI-Assisted Development
+
+## Project Overview
+
+`mcp-central-app` is the **frontend SPA** for the MCP Central project.
+It is a Vue 3 + Vite single-page application that provides the management
+interface for the `mcp-central` backend:
+
+- Browse and manage MCP endpoints, API keys, tenants and tools.
+- Monitor upstream connection health in real time via Socket.IO.
+- Chat with any LLM (Ollama locally, or OpenAI / Anthropic / Gemini via backend)
+  with full server-side MCP tool execution.
+- Administer users and roles (admin only).
+
+The app is built by the CI, packaged as `dist.tar.gz`, and published as a
+rolling GitHub Release (`frontend-latest`). The `mcp-central` backend CI
+downloads it and embeds it in the Docker image so the backend serves it as
+a static SPA — no separate server or CDN is required.
+
+---
+
+## Tech Stack
+
+| Layer        | Technology                                       |
+| ------------ | ------------------------------------------------ |
+| Framework    | Vue 3 (Composition API, `<script setup>`)        |
+| Language     | TypeScript 5.x (strict, ESM)                     |
+| Build tool   | Vite 5.x + `@tailwindcss/vite`                   |
+| Styling      | Tailwind CSS v4                                  |
+| State        | Pinia                                            |
+| Routing      | Vue Router 4                                     |
+| Auth         | `@auth0/auth0-vue` (OpenID Connect / PKCE)       |
+| Real-time    | `socket.io-client` v4 (multiple namespaces)      |
+| Markdown     | Marked v17 + DOMPurify + highlight.js            |
+| i18n         | vue-i18n v11                                     |
+| Utilities    | @vueuse/core                                     |
+| Package mgr  | pnpm                                             |
+
+---
+
+## Environment Variables
+
+All variables are `VITE_`-prefixed and embedded at build time.
+
+| Variable               | Required | Description                             |
+| ---------------------- | -------- | --------------------------------------- |
+| `VITE_API_BASE_URL`    | Yes      | mcp-central backend URL (e.g. `http://localhost:3000`) |
+| `VITE_AUTH0_DOMAIN`    | Yes      | Auth0 tenant domain                     |
+| `VITE_AUTH0_CLIENT_ID` | Yes      | Auth0 SPA client ID                     |
+| `VITE_AUTH0_AUDIENCE`  | Yes      | Auth0 API audience identifier           |
+
+---
+
+## Routing
+
+Defined in `src/router/index.ts`. All routes except `/` require authentication
+(enforced by navigation guard checking `authStore.isAuthenticated`).
+
+| Route              | Component              | Auth | Description                               |
+| ------------------ | ---------------------- | ---- | ----------------------------------------- |
+| `/`                | `LandingView`          | No   | Sign-in page                              |
+| `/dashboard`       | `DashboardView`        | Yes  | Overview, upstream status, VS Code config |
+| `/endpoints`       | `EndpointsView`        | Yes  | Endpoint CRUD                             |
+| `/endpoints/:id`   | `EndpointDetailView`   | Yes  | Tools & detail for one endpoint           |
+| `/tools`           | `ToolsView`            | Yes  | Aggregated tool browser                   |
+| `/chat`            | `ChatView`             | Yes  | Multi-session LLM chat                    |
+| `/registry`        | `RegistryView`         | Yes  | MCP server discovery                      |
+| `/settings`        | `SettingsView`         | Yes  | Tabbed settings                           |
+| `/:pathMatch(.*)*` | _(redirect to `/`)_    | —    | Catch-all                                 |
+
+---
+
+## Source Structure
+
+```
+src/
+├── main.ts                # App bootstrap: Auth0, Pinia, Router, i18n
+├── App.vue                # Root — socket init on auth, global toast
+├── api/
+│   ├── client.ts          # fetch wrapper for REST /setup/* (Auth0 JWT)
+│   ├── socket.ts          # Socket.IO namespace factory + emit helpers
+│   └── mcpClient.ts       # MCP Streamable HTTP client (Ollama tool calls)
+├── composables/
+│   ├── useChat.ts          # Unified chat dispatcher (Ollama ↔ backend)
+│   ├── useChatMcpKey.ts    # Resolves tenant API key for MCP tool calls
+│   ├── useDarkMode.ts      # Dark/light mode (localStorage)
+│   ├── useError.ts         # Error normalisation helpers
+│   ├── useMarkdown.ts      # Marked + DOMPurify rendering
+│   ├── useOllama.ts        # Direct Ollama streaming integration
+│   └── useRegistry.ts      # MCP registry helpers
+├── components/
+│   ├── layout/             # AppLayout, AppSidebar, AppHeader,
+│   │                       # TenantSwitcher, MobileMenuButton
+│   ├── ui/                 # Design system (see below)
+│   ├── chat/               # ChatSessionList, ChatMessage, ChatInput,
+│   │                       # ToolCallBlock, ThinkingBlock
+│   ├── dashboard/          # ArchitectureDiagram, VscodeConfigButton
+│   ├── endpoints/          # RegistryPickerModal
+│   ├── registry/           # ServerCard
+│   └── settings/           # SettingsProfile, SettingsTenants,
+│                           # SettingsKeys, SettingsAI, SettingsUsers
+├── stores/                 # See Pinia Stores section
+├── data/
+│   └── mcpRegistry.ts      # Local fallback MCP server catalog
+├── i18n/
+│   └── index.ts            # vue-i18n setup
+├── locales/
+│   └── en.ts               # English strings
+├── router/
+│   └── index.ts            # Routes + navigation guard
+├── types/
+│   └── index.ts            # Shared TypeScript interfaces
+└── views/                  # See Routing section
+```
+
+### Design system (`src/components/ui/`)
+
+| Component        | Description                            |
+| ---------------- | -------------------------------------- |
+| `AppButton`      | Primary / secondary / danger variants  |
+| `AppInput`       | Text input with label + error slot     |
+| `AppTextarea`    | Textarea with label + error slot       |
+| `AppSelect`      | Native select with label               |
+| `AppModal`       | Overlay modal with focus trap          |
+| `AppToggle`      | Boolean toggle switch                  |
+| `AppBadge`       | Status/label badge                     |
+| `AppAlert`       | Info/warning/error alert banner        |
+| `AppSpinner`     | Loading spinner                        |
+| `AppToast`       | Toast notification (auto-dismissed)    |
+| `ConfirmDialog`  | Confirmation modal (destructive actions) |
+| `EmptyState`     | Empty list placeholder + CTA           |
+| `SkeletonBlock`  | Skeleton loader for async content      |
+| `StatusBadge`    | Coloured upstream connection status    |
+
+---
+
+## Pinia Stores
+
+| Store          | File            | Description                                        |
+| -------------- | --------------- | -------------------------------------------------- |
+| `auth`         | `auth.ts`       | Auth0 session: user profile, token, `isAdmin`      |
+| `chat`         | `chat.ts`       | Chat sessions persisted in `localStorage`          |
+| `chatSettings` | `chatSettings.ts` | Active provider, model, system prompt (localStorage) |
+| `endpoints`    | `endpoints.ts`  | MCP endpoint CRUD via `/endpoints` Socket.IO       |
+| `socket`       | `socket.ts`     | Socket connection state                            |
+| `status`       | `status.ts`     | Upstream connection statuses (real-time)           |
+| `tenant`       | `tenant.ts`     | Active tenant, tenant list, API key selection      |
+| `toast`        | `toast.ts`      | Toast notification queue                           |
+| `tools`        | `tools.ts`      | Aggregated tool list (real-time)                   |
+| `users`        | `users.ts`      | Admin — user list + role management                |
+| `aiKeys`       | `aiKeys.ts`     | Per-user LLM provider key management               |
+
+---
+
+## API Layer
+
+### REST (`src/api/client.ts`)
+
+Used only for the `/setup/*` routes (Auth0 JWT bearer token).
+
+- `GET /setup/me` — current user profile
+- `GET /setup/tenants` — list user's tenants
+- `POST /setup/tenants` — create tenant + first API key
+
+### Socket.IO (`src/api/socket.ts`)
+
+The socket layer manages connections to all backend namespaces. Each namespace
+has a dedicated `connect*`, `disconnect*`, and `emit*` helper exported from
+`socket.ts`.
+
+#### `connectAll(token)` — connects all domain namespaces at once
+
+| Namespace    | Store(s)                   | Key events (server → client)              |
+| ------------ | -------------------------- | ----------------------------------------- |
+| `/tenants`   | `tenant`                   | Session, tenant list                      |
+| `/endpoints` | `endpoints`, `status`      | `connection_status`, endpoint CRUD        |
+| `/tools`     | `tools`                    | `tools_changed`, tool queries             |
+| `/keys`      | `tenant`                   | API key CRUD                              |
+| `/chat`      | `chatSettings`, `aiKeys`   | `chat:token`, `chat:tool_start`, `chat:tool_done`, `chat:done`, `chat:error` |
+| `/users`     | `users`                    | User list, role updates (admin only)      |
+| `/i18n`      | _(global)_                 | Error code + key translation (public)     |
+
+#### Socket readiness gate
+
+`socket.ts` exports `markSocketReady()` / `resetSocketReady()`. All `emit()`
+calls are queued until `markSocketReady()` is called from `App.vue` after full
+initialisation. This prevents race conditions on page reload.
+
+### MCP Streamable HTTP (`src/api/mcpClient.ts`)
+
+A thin client used exclusively by the **Ollama** chat path to call MCP tools.
+
+- Maintains one `sessionId` per tenant API key.
+- On 404 (server restart), transparently re-initialises the session and retries once.
+- Methods: `initialize(key)`, `callTool(name, args, key)`, `deleteSession()`.
+
+---
+
+## Chat System
+
+### Provider dispatch (`src/composables/useChat.ts`)
+
+`useChat` is the single entry point for all chat generation. It dispatches
+based on `chatSettings.settings.provider`:
+
+| Provider     | Execution path | Tool call path            |
+| ------------ | -------------- | ------------------------- |
+| `"ollama"`   | `useOllama` (direct browser fetch to Ollama) | `mcpClient.ts` → backend `/mcp` |
+| `"openai"`   | Socket.IO `/chat` → backend `ChatService`    | `McpProxyManager` (server-side) |
+| `"anthropic"`| Socket.IO `/chat` → backend `ChatService`    | `McpProxyManager` (server-side) |
+| `"gemini"`   | Socket.IO `/chat` → backend `ChatService`    | `McpProxyManager` (server-side) |
+
+The `generate(opts: GenerateOpts)` signature is identical for all providers,
+so `ChatView.vue` is fully provider-agnostic.
+
+### Backend streaming events (`/chat` namespace)
+
+During a `chat` event the backend emits (server → client):
+
+| Event              | Payload                                              |
+| ------------------ | ---------------------------------------------------- |
+| `chat:token`       | `{ content: string, thinking?: string }`             |
+| `chat:tool_start`  | `{ id, name, args }`                                 |
+| `chat:tool_done`   | `{ id, name, result?, error?, status }`              |
+| `chat:done`        | `{ content, thinking?, usage? }`                     |
+| `chat:error`       | `{ message: string }`                                |
+
+`thinking` is populated for Anthropic extended thinking and rendered by
+`ThinkingBlock.vue` as a collapsible section.
+
+### Chat sessions
+
+Sessions (messages, title, tenantId) are persisted in `localStorage` via the
+`chat` store. No session data is stored on the backend.
+
+### LLM provider key management
+
+OpenAI / Anthropic / Gemini keys are stored **encrypted on the backend** via the
+`aiKeys` store (Socket.IO `/chat` events `saveProviderKey` / `listProviderKeys`
+/ `deleteProviderKey`). The frontend only ever sees the `keyHint` (last 4 chars).
+Keys are never stored in `localStorage`.
+
+---
+
+## Authentication Flow
+
+1. User visits `/` → `LandingView` shows Auth0 login button.
+2. Auth0 redirect/popup → `auth0-vue` stores the access token **in memory**.
+3. `App.vue` calls `authStore.init()` → fetches user profile from `GET /setup/me`.
+4. `App.vue` calls `tenantStore.init()` → fetches tenants from `GET /setup/tenants`.
+5. `App.vue` calls `connectAll(token)` → opens all Socket.IO namespaces.
+6. `App.vue` emits `selectTenant` on `/tenants` with the active `tenantId`.
+7. `markSocketReady()` unblocks all queued `emit()` calls.
+
+On logout: `disconnectAll()` closes all sockets, stores are reset.
+
+On socket reconnection: the frontend re-emits `selectTenant` to restore the
+active tenant room across all namespaces.
+
+---
+
+## Settings View
+
+`SettingsView.vue` is a single route (`/settings`) with a tabbed left-nav.
+Tabs are rendered dynamically — **Users** tab is only visible to admins.
+
+| Tab id    | Component           | Content                                      |
+| --------- | ------------------- | -------------------------------------------- |
+| `profile` | `SettingsProfile`   | Auth0 name, email, role display              |
+| `tenants` | `SettingsTenants`   | Create / delete tenants (admins see all)     |
+| `keys`    | `SettingsKeys`      | Create / revoke API keys for active tenant   |
+| `ai`      | `SettingsAI`        | Provider selector, model, LLM key storage, Ollama URL |
+| `users`   | `SettingsUsers`     | Admin — list all users, promote/demote roles |
+
+---
+
+## i18n
+
+All user-facing strings are in `src/locales/en.ts`. Components never contain
+hardcoded user-facing text.
+
+The `/i18n` Socket.IO namespace (backend) provides runtime translation of error
+codes returned by the API and Socket.IO callbacks. The frontend falls back to
+the `message` field if the translation is unavailable.
+
+---
+
+## Error Handling Convention
+
+- HTTP / Socket.IO errors always carry a `code` field (e.g. `ERR_AUTH_KEY_INVALID`).
+- `useError.ts` normalises errors into a `{ code, message }` shape.
+- **Contextual errors** (400, 404, 409): displayed inline, next to the relevant field or list.
+- **Global errors** (500, network, auth 401): toasted via the `toast` store.
+- Never silently swallow errors. Every error must surface to the user.
+
+---
+
+## Development Rules
+
+1. **Vue 3 Composition API only.** `<script setup>` in all components.
+2. **TypeScript strict.** No `any` unless documented.
+3. **Tailwind utility classes only.** No custom CSS except for design tokens in CSS variables.
+4. **Pinia stores for shared state.** Composables for reusable logic.
+5. **Tokens in memory only.** The Auth0 access token lives in `authStore` (memory), never in `localStorage`.
+6. **API keys are secrets.** Shown once on creation via a modal with copy button. Never logged.
+7. **i18n from day one.** No hardcoded user-facing strings — always use `t()`.
+8. **Empty states everywhere.** Every list view has a meaningful `EmptyState` with a CTA.
+9. **Loading states everywhere.** Skeleton loaders for initial fetches, spinners for actions.
+10. **Session recovery.** After any socket reconnect, re-emit `selectTenant` to restore the tenant room.
