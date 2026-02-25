@@ -135,7 +135,7 @@
                 <p class="text-sm mt-1" style="color: var(--text-secondary);">Keys used by your AI clients (VS Code,
                     Claude Desktop…) to authenticate with this tenant’s proxy</p>
             </div>
-            <AppButton @click="showCreateModal = true">
+            <AppButton class="shrink-0" @click="showCreateModal = true">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <path d="M12 5v14M5 12h14" />
                 </svg>

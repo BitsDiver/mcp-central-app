@@ -43,18 +43,20 @@
   const form = ref({
     name: '',
     namespace: '',
-    transport: 'streamable-http' as 'streamable-http' | 'stdio' | 'sse',
+    transport: 'streamable-http' as 'streamable-http' | 'stdio' | 'sse' | 'a2a',
     url: '',
     command: '',
     args: '',
     headers: '',
     env: '',
+    a2aApiKey: '',
     isEnabled: true,
   });
 
   const transportOptions = [
     { value: 'streamable-http', label: 'Streamable HTTP' },
     { value: 'stdio', label: 'stdio (local process)' },
+    { value: 'a2a', label: 'A2A Agent (HTTP+JSON)' },
   ];
 
   function getUpstreamStatus(endpointId: string): EndpointStatus {
@@ -76,7 +78,7 @@
 
   function openAdd() {
     editingEndpoint.value = null;
-    form.value = { name: '', namespace: '', transport: 'streamable-http', url: '', command: '', args: '', headers: '', env: '', isEnabled: true };
+    form.value = { name: '', namespace: '', transport: 'streamable-http', url: '', command: '', args: '', headers: '', env: '', a2aApiKey: '', isEnabled: true };
     clearErrors();
     showModal.value = true;
   }
@@ -92,6 +94,7 @@
       args: (server.args ?? []).join('\n'),
       headers: '',
       env: '',
+      a2aApiKey: '',
       isEnabled: true,
     };
     clearErrors();
@@ -100,6 +103,7 @@
 
   function openEdit(ep: Endpoint) {
     editingEndpoint.value = ep;
+    const isA2a = ep.transport === 'a2a';
     form.value = {
       name: ep.name,
       namespace: ep.namespace,
@@ -107,8 +111,9 @@
       url: ep.url ?? '',
       command: ep.command ?? '',
       args: ep.args.join('\n'),
-      headers: Object.entries(ep.headers).map(([k, v]) => `${k}: ${v}`).join('\n'),
+      headers: isA2a ? '' : Object.entries(ep.headers).map(([k, v]) => `${k}: ${v}`).join('\n'),
       env: Object.entries(ep.env).map(([k, v]) => `${k}=${v}`).join('\n'),
+      a2aApiKey: isA2a ? ((ep.headers as Record<string, string>)?.apiKey ?? '') : '',
       isEnabled: ep.isEnabled,
     };
     clearErrors();
@@ -162,6 +167,11 @@
       if (form.value.transport === 'streamable-http') {
         payload.url = form.value.url.trim() || undefined;
         payload.headers = parseKVLines(form.value.headers);
+      } else if (form.value.transport === 'a2a') {
+        payload.url = form.value.url.trim() || undefined;
+        if (form.value.a2aApiKey.trim()) {
+          payload.headers = { apiKey: form.value.a2aApiKey.trim() };
+        }
       } else {
         payload.command = form.value.command.trim() || undefined;
         payload.args = form.value.args.split('\n').map((a) => a.trim()).filter(Boolean);
@@ -364,6 +374,14 @@
           <AppTextarea v-model="form.headers" label="Upstream server auth headers (key: value, one per line)"
             placeholder="Authorization: Bearer ghp_..." id="ep-headers" :rows="3"
             hint="Sent by central-MCP to authenticate with this upstream server. One header per line in 'Key: Value' format." />
+        </template>
+
+        <template v-else-if="form.transport === 'a2a'">
+          <AppInput v-model="form.url" label="Agent Base URL" placeholder="https://agent.example.com"
+            :error="errors['url']" id="ep-url"
+            hint="The base URL of the remote A2A agent. The card will be fetched from {url}/.well-known/agent-card.json." />
+          <AppInput v-model="form.a2aApiKey" label="API Key (optional)" placeholder="sk-..." id="ep-a2a-apikey"
+            hint="Sent as X-API-Key header when calling the remote A2A agent." />
         </template>
 
         <template v-else>

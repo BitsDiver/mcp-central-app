@@ -27,24 +27,25 @@
 - 🌙 **Dark mode** — system-aware, toggle in settings
 - 🌐 **i18n ready** — full internationalization infrastructure (English by default)
 - 👑 **Admin panel** — user management and role assignment (admin only)
+- 🤝 **A2A panel** — copyable URLs to expose tenant tools to external agents via [A2A v1.0](https://google.github.io/A2A/)
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer        | Technology                                             |
-| :----------- | :----------------------------------------------------- |
-| Framework    | Vue 3 (Composition API, `<script setup>`)              |
-| Language     | TypeScript 5.x (strict mode, ESM)                     |
-| Build tool   | Vite 5.x                                               |
-| Styling      | Tailwind CSS v4 (`@tailwindcss/vite`)                  |
-| State        | Pinia                                                  |
-| Routing      | Vue Router 4                                           |
-| Auth         | Auth0 (`@auth0/auth0-vue`, OpenID Connect)             |
-| Real-time    | Socket.IO client (multiple namespaces)                 |
-| Markdown     | Marked + DOMPurify + highlight.js                      |
-| i18n         | vue-i18n                                               |
-| Utilities    | VueUse                                                 |
+| Layer      | Technology                                 |
+| :--------- | :----------------------------------------- |
+| Framework  | Vue 3 (Composition API, `<script setup>`)  |
+| Language   | TypeScript 5.x (strict mode, ESM)          |
+| Build tool | Vite 5.x                                   |
+| Styling    | Tailwind CSS v4 (`@tailwindcss/vite`)      |
+| State      | Pinia                                      |
+| Routing    | Vue Router 4                               |
+| Auth       | Auth0 (`@auth0/auth0-vue`, OpenID Connect) |
+| Real-time  | Socket.IO client (multiple namespaces)     |
+| Markdown   | Marked + DOMPurify + highlight.js          |
+| i18n       | vue-i18n                                   |
+| Utilities  | VueUse                                     |
 
 ---
 
@@ -77,12 +78,12 @@ The app is available at `http://localhost:5173`.
 
 All variables are prefixed `VITE_` and embedded at build time by Vite.
 
-| Variable               | Description                        | Example                                        |
-| :--------------------- | :--------------------------------- | :--------------------------------------------- |
-| `VITE_API_BASE_URL`    | URL of the mcp-central backend     | `http://localhost:3000`                        |
-| `VITE_AUTH0_DOMAIN`    | Auth0 tenant domain                | `dev-xxxxxxxx.eu.auth0.com`                    |
-| `VITE_AUTH0_CLIENT_ID` | Auth0 application client ID        | `O9Xy9uBX...`                                  |
-| `VITE_AUTH0_AUDIENCE`  | Auth0 API audience identifier      | `https://mcp-central.example.com/api`          |
+| Variable               | Description                    | Example                               |
+| :--------------------- | :----------------------------- | :------------------------------------ |
+| `VITE_API_BASE_URL`    | URL of the mcp-central backend | `http://localhost:3000`               |
+| `VITE_AUTH0_DOMAIN`    | Auth0 tenant domain            | `dev-xxxxxxxx.eu.auth0.com`           |
+| `VITE_AUTH0_CLIENT_ID` | Auth0 application client ID    | `O9Xy9uBX...`                         |
+| `VITE_AUTH0_AUDIENCE`  | Auth0 API audience identifier  | `https://mcp-central.example.com/api` |
 
 ---
 
@@ -127,14 +128,14 @@ src/
 │   ├── ui/                  # Design system: AppButton, AppInput, AppModal,
 │   │                        # AppSelect, AppTextarea, AppToggle, AppBadge,
 │   │                        # AppAlert, AppSpinner, AppToast, ConfirmDialog,
-│   │                        # EmptyState, SkeletonBlock, StatusBadge
+   │                        # EmptyState, SkeletonBlock, StatusBadge, CopyField
 │   ├── chat/                # ChatSessionList, ChatMessage, ChatInput,
 │   │                        # ToolCallBlock, ThinkingBlock
 │   ├── dashboard/           # ArchitectureDiagram, VscodeConfigButton
 │   ├── endpoints/           # RegistryPickerModal
 │   ├── registry/            # ServerCard
 │   └── settings/            # SettingsProfile, SettingsTenants, SettingsKeys,
-│                            # SettingsAI, SettingsUsers
+   │                        # SettingsAI, SettingsUsers, SettingsA2A
 ├── stores/
 │   ├── auth.ts              # Auth0 user session + token
 │   ├── chat.ts              # Chat sessions (persisted in localStorage)
@@ -172,16 +173,16 @@ src/
 
 ## 🗺️ Pages
 
-| Route              | View                   | Auth  | Description                                        |
-| :----------------- | :--------------------- | :---: | :------------------------------------------------- |
-| `/`                | `LandingView`          | No    | Sign-in page with Auth0 login button               |
-| `/dashboard`       | `DashboardView`        | Yes   | Overview, upstream status, VS Code config snippet  |
-| `/endpoints`       | `EndpointsView`        | Yes   | List, create, toggle, delete MCP endpoints         |
-| `/endpoints/:id`   | `EndpointDetailView`   | Yes   | Tools & connection details for one endpoint        |
-| `/tools`           | `ToolsView`            | Yes   | Browse all tools across all endpoints              |
-| `/chat`            | `ChatView`             | Yes   | Multi-session LLM chat with MCP tool calling       |
-| `/registry`        | `RegistryView`         | Yes   | Discover curated MCP servers, add in one click     |
-| `/settings`        | `SettingsView`         | Yes   | Profile / Tenants / API Keys / AI / Users (admin)  |
+| Route            | View                 | Auth | Description                                             |
+| :--------------- | :------------------- | :--: | :------------------------------------------------------ |
+| `/`              | `LandingView`        |  No  | Sign-in page with Auth0 login button                    |
+| `/dashboard`     | `DashboardView`      | Yes  | Overview, upstream status, VS Code config snippet       |
+| `/endpoints`     | `EndpointsView`      | Yes  | List, create, toggle, delete MCP endpoints              |
+| `/endpoints/:id` | `EndpointDetailView` | Yes  | Tools & connection details for one endpoint             |
+| `/tools`         | `ToolsView`          | Yes  | Browse all tools across all endpoints                   |
+| `/chat`          | `ChatView`           | Yes  | Multi-session LLM chat with MCP tool calling            |
+| `/registry`      | `RegistryView`       | Yes  | Discover curated MCP servers, add in one click          |
+| `/settings`      | `SettingsView`       | Yes  | Profile / Tenants / API Keys / AI / A2A / Users (admin) |
 
 ---
 
@@ -200,15 +201,15 @@ Authorization: Bearer <auth0_access_token>
 All management operations go through dedicated namespaces. The Auth0 access token
 is passed on handshake via `auth: { token }`:
 
-| Namespace    | Store(s)                  | Description                            |
-| :----------- | :------------------------ | :------------------------------------- |
-| `/tenants`   | `tenant`                  | Tenant selection, list, delete         |
-| `/endpoints` | `endpoints`, `status`     | Endpoint CRUD + push status events     |
-| `/tools`     | `tools`                   | Tool list queries + `tools_changed`    |
-| `/keys`      | `tenant`                  | API key CRUD                           |
-| `/chat`      | `chatSettings`, `aiKeys`  | Streaming LLM generation + key mgmt   |
-| `/users`     | `users`                   | Admin — user list + role management    |
-| `/i18n`      | _(global)_                | Error code & key translation (public)  |
+| Namespace    | Store(s)                 | Description                           |
+| :----------- | :----------------------- | :------------------------------------ |
+| `/tenants`   | `tenant`                 | Tenant selection, list, delete        |
+| `/endpoints` | `endpoints`, `status`    | Endpoint CRUD + push status events    |
+| `/tools`     | `tools`                  | Tool list queries + `tools_changed`   |
+| `/keys`      | `tenant`                 | API key CRUD                          |
+| `/chat`      | `chatSettings`, `aiKeys` | Streaming LLM generation + key mgmt   |
+| `/users`     | `users`                  | Admin — user list + role management   |
+| `/i18n`      | _(global)_               | Error code & key translation (public) |
 
 ### MCP Streamable HTTP (`mcpClient.ts`)
 
@@ -221,18 +222,35 @@ MCP proxy (`/mcp`). Maintains a long-lived session per tenant API key.
 
 The chat feature supports two execution modes selected in **Settings → AI Settings**:
 
-| Provider   | Execution   | Tool calls            | Key storage                   |
-| :--------- | :---------- | :-------------------- | :---------------------------- |
-| **Ollama** | Browser     | Via `mcpClient.ts` (MCP Streamable HTTP) | Ollama URL in localStorage |
-| **OpenAI** | Backend     | Via `McpProxyManager` | AES-256-GCM on backend        |
-| **Anthropic** | Backend  | Via `McpProxyManager` | AES-256-GCM on backend        |
-| **Gemini** | Backend     | Via `McpProxyManager` | AES-256-GCM on backend        |
+| Provider      | Execution | Tool calls                               | Key storage                |
+| :------------ | :-------- | :--------------------------------------- | :------------------------- |
+| **Ollama**    | Browser   | Via `mcpClient.ts` (MCP Streamable HTTP) | Ollama URL in localStorage |
+| **OpenAI**    | Backend   | Via `McpProxyManager`                    | AES-256-GCM on backend     |
+| **Anthropic** | Backend   | Via `McpProxyManager`                    | AES-256-GCM on backend     |
+| **Gemini**    | Backend   | Via `McpProxyManager`                    | AES-256-GCM on backend     |
 
 For OpenAI/Anthropic/Gemini the generation loop runs entirely on the backend
 (`/chat` Socket.IO namespace). Tokens stream to the client via `chat:token` events.
 Anthropic extended thinking is rendered via `ThinkingBlock.vue`.
 
 Chat sessions (messages, titles) are persisted in `localStorage`.
+
+---
+
+## 🤝 A2A Integration
+
+The **Settings → A2A** tab exposes the URLs needed for external agents to consume tenant tools via the [A2A v1.0](https://google.github.io/A2A/) protocol:
+
+| URL                                     | Auth    | Description                    |
+| :-------------------------------------- | :------ | :----------------------------- |
+| `{base}/.well-known/agent-card.json`    | None    | Public capabilities card       |
+| `{base}/a2a/extendedAgentCard?apiKey=…` | API key | Full skill list for the tenant |
+| `{base}/a2a/message:send`               | API key | Blocking tool invocation       |
+| `{base}/a2a/message:stream`             | API key | SSE-streamed tool invocation   |
+
+All URLs are one-click copyable via the `CopyField` component: the clipboard icon transitions to a green ✓ with an animated "Copied!" tooltip.
+
+A2A agents can also be registered as **upstream endpoint sources**: in the Add/Edit Endpoint form, select transport **A2A Agent (HTTP+JSON)**, provide the agent base URL and an optional API key (forwarded as `X-API-Key`).
 
 ---
 

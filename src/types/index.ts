@@ -26,7 +26,7 @@ export interface NewApiKey extends ApiKey {
   key: string;
 }
 
-export type TransportType = "streamable-http" | "stdio";
+export type TransportType = "streamable-http" | "stdio" | "sse" | "a2a";
 export type EndpointStatus =
   | "connecting"
   | "connected"

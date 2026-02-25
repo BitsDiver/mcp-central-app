@@ -68,6 +68,16 @@ Defined in `src/router/index.ts`. All routes except `/` require authentication
 | `/settings`        | `SettingsView`         | Yes  | Tabbed settings                           |
 | `/:pathMatch(.*)*` | _(redirect to `/`)_    | —    | Catch-all                                 |
 
+### Endpoint transport types (`EndpointsView`)
+
+Supported values for the `transport` field when adding/editing an upstream endpoint:
+
+| Value             | Required fields          | Notes                                        |
+| ----------------- | ------------------------ | -------------------------------------------- |
+| `streamable-http` | `url`                    | Standard MCP Streamable HTTP                 |
+| `stdio`           | `command`, optional `args`/`env` | Subprocess (only on self-hosted backends) |
+| `a2a`             | `url`                    | A2A v1.0 agent; optional `apiKey` stored in `headers.apiKey`, forwarded as `X-API-Key` |
+
 ---
 
 ## Source Structure
@@ -98,7 +108,8 @@ src/
 │   ├── endpoints/          # RegistryPickerModal
 │   ├── registry/           # ServerCard
 │   └── settings/           # SettingsProfile, SettingsTenants,
-│                           # SettingsKeys, SettingsAI, SettingsUsers
+│                           # SettingsKeys, SettingsAI, SettingsUsers,
+│                           # SettingsA2A
 ├── stores/                 # See Pinia Stores section
 ├── data/
 │   └── mcpRegistry.ts      # Local fallback MCP server catalog
@@ -131,6 +142,7 @@ src/
 | `EmptyState`     | Empty list placeholder + CTA           |
 | `SkeletonBlock`  | Skeleton loader for async content      |
 | `StatusBadge`    | Coloured upstream connection status    |
+| `CopyField`      | Read-only input-group with clipboard → ✓ icon and "Copied!" tooltip |
 
 ---
 
@@ -270,6 +282,7 @@ Tabs are rendered dynamically — **Users** tab is only visible to admins.
 | `tenants` | `SettingsTenants`   | Create / delete tenants (admins see all)     |
 | `keys`    | `SettingsKeys`      | Create / revoke API keys for active tenant   |
 | `ai`      | `SettingsAI`        | Provider selector, model, LLM key storage, Ollama URL |
+| `a2a`     | `SettingsA2A`       | Copyable A2A v1.0 endpoint URLs (public card, extended card, message endpoints) |
 | `users`   | `SettingsUsers`     | Admin — list all users, promote/demote roles |
 
 ---

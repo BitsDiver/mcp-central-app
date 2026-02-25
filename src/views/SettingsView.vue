@@ -6,11 +6,12 @@
   import SettingsKeys from '@/components/settings/SettingsKeys.vue';
   import SettingsAI from '@/components/settings/SettingsAI.vue';
   import SettingsUsers from '@/components/settings/SettingsUsers.vue';
+  import SettingsA2A from '@/components/settings/SettingsA2A.vue';
   import { useAuthStore } from '@/stores/auth';
 
   const authStore = useAuthStore();
 
-  type Panel = 'profile' | 'tenants' | 'keys' | 'ai' | 'users';
+  type Panel = 'profile' | 'tenants' | 'keys' | 'ai' | 'users' | 'a2a';
   const activePanel = ref<Panel>('profile');
 
   const navItems = computed(() => {
@@ -34,6 +35,11 @@
         id: 'ai',
         label: 'AI Settings',
         icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17H4a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2h-1',
+      },
+      {
+        id: 'a2a',
+        label: 'A2A',
+        icon: 'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
       },
     ];
     if (authStore.isAdmin) {
@@ -78,6 +84,7 @@
           <SettingsKeys v-else-if="activePanel === 'keys'" />
           <SettingsAI v-else-if="activePanel === 'ai'" />
           <SettingsUsers v-else-if="activePanel === 'users' && authStore.isAdmin" />
+          <SettingsA2A v-else-if="activePanel === 'a2a'" />
         </main>
 
       </div>
