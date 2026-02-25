@@ -6,14 +6,12 @@
   import { useEndpointStore } from '@/stores/endpoints';
   import { useToolStore } from '@/stores/tools';
   import { useStatusStore } from '@/stores/status';
-  import { useRouter } from 'vue-router';
 
   const tenantStore = useTenantStore();
   const socketStore = useSocketStore();
   const endpointStore = useEndpointStore();
   const toolStore = useToolStore();
   const statusStore = useStatusStore();
-  const router = useRouter();
 
   const open = ref(false);
   const switching = ref(false);

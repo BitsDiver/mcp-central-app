@@ -34,14 +34,12 @@
     const vscodeConfig = computed(() => {
         if (!createdKey.value) return '';
         return JSON.stringify({
-            mcp: {
-                servers: {
-                    'MCP Central': {
-                        type: 'http',
-                        url: `${BASE_URL}/mcp`,
-                        headers: {
-                            Authorization: `Bearer ${createdKey.value}`,
-                        },
+            servers: {
+                'MCP Central': {
+                    type: 'http',
+                    url: `${BASE_URL}/mcp`,
+                    headers: {
+                        Authorization: `Bearer ${createdKey.value}`,
                     },
                 },
             },

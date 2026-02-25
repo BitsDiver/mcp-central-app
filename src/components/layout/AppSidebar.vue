@@ -206,7 +206,21 @@
   }
 
   .sidebar-link.active {
-    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-    color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary-500) 12%, transparent);
+    color: var(--color-primary-500);
+    font-weight: 600;
+  }
+
+  .sidebar-link.active:hover {
+    background: color-mix(in srgb, var(--color-primary-500) 18%, transparent);
+  }
+
+  [data-theme="dark"] .sidebar-link.active {
+    background: color-mix(in srgb, var(--color-primary-400) 14%, transparent);
+    color: var(--color-primary-400);
+  }
+
+  [data-theme="dark"] .sidebar-link.active:hover {
+    background: color-mix(in srgb, var(--color-primary-400) 20%, transparent);
   }
 </style>

@@ -1,0 +1,64 @@
+# ──────────────────────────────────────────────────────────────
+# mcp-central — Frontend release
+#
+# Triggers on every push to `main`.
+# Builds the Vite app and publishes the `dist/` folder as a
+# tarball attached to a rolling GitHub release (tag: frontend-latest).
+# The backend CI pulls this artifact to embed the UI in its image.
+# ──────────────────────────────────────────────────────────────
+
+name: Release frontend
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write   # required to create / update GitHub Releases
+
+jobs:
+  build-and-release:
+    name: Build & publish
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Node + pnpm ─────────────────────────────────────────
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # ── Install & build ─────────────────────────────────────
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      # ── Package dist/ ────────────────────────────────────────
+      - name: Create dist archive
+        run: tar -czf dist.tar.gz -C dist .
+
+      # ── Publish (rolling "frontend-latest" release) ──────────
+      - name: Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: frontend-latest
+          name: "Frontend — latest build"
+          prerelease: true
+          body: |
+            Automated build from commit ${{ github.sha }}.
+            Published on ${{ github.event.head_commit.timestamp }}.
+          files: dist.tar.gz

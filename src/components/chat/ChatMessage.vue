@@ -27,7 +27,6 @@
 
   const hasAttachments = computed(() => (props.message.attachments?.length ?? 0) > 0);
   const hasThinking = computed(() => !!props.message.thinking);
-  const hasToolCalls = computed(() => (props.message.toolCalls?.length ?? 0) > 0);
   const hasContent = computed(() => !!props.message.content || props.message.isStreaming);
 </script>
 
