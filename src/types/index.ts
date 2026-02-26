@@ -26,7 +26,12 @@ export interface NewApiKey extends ApiKey {
   key: string;
 }
 
-export type TransportType = "streamable-http" | "stdio" | "sse" | "a2a";
+export type TransportType =
+  | "streamable-http"
+  | "stdio"
+  | "sse"
+  | "a2a"
+  | "agent-tunnel";
 export type EndpointStatus =
   | "connecting"
   | "connected"
@@ -46,11 +51,44 @@ export interface Endpoint {
   headers: Record<string, string>;
   isEnabled: boolean;
   toolCount: number;
+  /** If set, this endpoint is tunnelled through a local agent process */
+  agentId: string | null;
   /** Live connection status pushed by connection_status socket event */
   connectionStatus?: EndpointStatus;
   lastConnectedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Agent types ────────────────────────────────────────────────────────────
+
+export interface Agent {
+  id: string;
+  tenantId: string;
+  name: string;
+  namespace: string;
+  keyPrefix: string;
+  isActive: boolean;
+  ipWhitelist: string[];
+  lastSeenAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentWithStatus extends Agent {
+  isConnected: boolean;
+  connectedIp?: string;
+  /** Semver version string reported by the agent process at connect-time */
+  version?: string;
+}
+
+/** Returned once after createAgent — contains the plain-text key (never shown again) */
+export interface AgentCreateResponse {
+  id: string;
+  key: string;
+  keyPrefix: string;
+  name: string;
+  namespace: string;
 }
 
 export interface Tool {

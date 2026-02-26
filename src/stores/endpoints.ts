@@ -3,6 +3,7 @@ import { ref } from "vue";
 import type { Endpoint } from "@/types";
 import { emitEndpoints } from "@/api/socket";
 import { useToastStore } from "./toast";
+import { useStatusStore } from "./status";
 
 export const useEndpointStore = defineStore("endpoints", () => {
   const endpoints = ref<Endpoint[]>([]);
@@ -39,6 +40,9 @@ export const useEndpointStore = defineStore("endpoints", () => {
     const res = await emitEndpoints("deleteEndpoint", { endpointId: id });
     if (res.status === "error") throw new Error(res.message ?? res.code);
     endpoints.value = endpoints.value.filter((e) => e.id !== id);
+    // Remove the corresponding upstream status entry immediately so the
+    // Architecture Overview and upstream-status panels don't show a zombie row.
+    useStatusStore().removeUpstream(id);
     const toast = useToastStore();
     toast.success("Endpoint removed.");
   }

@@ -42,6 +42,12 @@ export const useStatusStore = defineStore("status", () => {
     }
   }
 
+  function removeUpstream(endpointId: string): void {
+    upstreams.value = upstreams.value.filter(
+      (u) => u.endpointId !== endpointId,
+    );
+  }
+
   function clear(): void {
     upstreams.value = [];
   }
@@ -53,6 +59,7 @@ export const useStatusStore = defineStore("status", () => {
     isLoading,
     load,
     updateUpstream,
+    removeUpstream,
     clear,
   };
 });

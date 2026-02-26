@@ -6,6 +6,9 @@
   import { useStatusStore } from '@/stores/status';
   import { useToolStore } from '@/stores/tools';
   import { useTenantStore } from '@/stores/tenant';
+  import { useEndpointStore } from '@/stores/endpoints';
+  import { useAgentStore } from '@/stores/agents';
+  import { useRegistry } from '@/composables/useRegistry';
   import StatusBadge from '@/components/ui/StatusBadge.vue';
   import SkeletonBlock from '@/components/ui/SkeletonBlock.vue';
   import type { EndpointStatus, UpstreamStatus } from '@/types';
@@ -13,10 +16,15 @@
   const statusStore = useStatusStore();
   const toolStore = useToolStore();
   const tenantStore = useTenantStore();
+  const endpointStore = useEndpointStore();
+  const agentStore = useAgentStore();
+  const { namespaceMap } = useRegistry();
 
   onMounted(async () => {
     if (statusStore.upstreams.length === 0) await statusStore.load();
     if (toolStore.tools.length === 0) await toolStore.load();
+    if (endpointStore.endpoints.length === 0) await endpointStore.load();
+    if (agentStore.agents.length === 0) await agentStore.load();
   });
 
   // ── Error tooltip (Teleported to escape overflow contexts) ──
@@ -33,6 +41,12 @@
     errorTipEndpoint.value = null;
   }
 
+  /** Returns the agent that owns the given endpoint, if any */
+  function getAgentForEndpoint(endpointId: string) {
+    const ep = endpointStore.endpoints.find((e) => e.id === endpointId);
+    if (!ep?.agentId) return null;
+    return agentStore.agents.find((a) => a.id === ep.agentId) ?? null;
+  }
 
   const stats = computed(() => [
     {
@@ -56,6 +70,13 @@
       color: 'text-amber-500',
       darkBg: 'rgba(245,158,11,0.12)',
     },
+    {
+      label: 'Local Agents',
+      value: agentStore.agents.length,
+      icon: 'M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18',
+      color: 'text-purple-500',
+      darkBg: 'rgba(139,92,246,0.12)',
+    },
   ]);
 
   const isLoading = computed(() => statusStore.isLoading || toolStore.isLoading);
@@ -74,9 +95,9 @@
         <VscodeConfigButton />
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <template v-if="isLoading">
-          <div v-for="i in 3" :key="i" class="card p-5">
+          <div v-for="i in 4" :key="i" class="card p-5">
             <SkeletonBlock height="1rem" width="60%" />
             <SkeletonBlock height="2rem" width="40%" class="mt-3" />
           </div>
@@ -126,8 +147,35 @@
         <div v-else class="divide-y" style="border-color: var(--border-default);">
           <div v-for="upstream in statusStore.upstreams" :key="upstream.endpointId"
             class="flex items-center gap-4 px-5 py-3 transition-colors hover:bg-[var(--bg-hover)]">
-            <div class="flex-1 min-w-0">
+            <!-- Server icon: registry icon letters or generic plug -->
+            <div class="shrink-0">
+              <div v-if="namespaceMap[upstream.namespace]"
+                class="w-7 h-7 rounded-md text-[10px] font-bold text-white flex items-center justify-center"
+                :style="`background: ${namespaceMap[upstream.namespace].color}`">
+                {{ namespaceMap[upstream.namespace].iconLetters }}
+              </div>
+              <div v-else class="w-7 h-7 rounded-md flex items-center justify-center"
+                style="background: var(--bg-muted); border: 1px solid var(--border-default);">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+                  style="color: var(--text-tertiary);">
+                  <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                  <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke-linecap="round"
+                    stroke-linejoin="round" />
+                </svg>
+              </div>
+            </div>
+            <div class="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
               <p class="text-sm font-medium truncate" style="color: var(--text-primary);">{{ upstream.namespace }}</p>
+              <span v-if="getAgentForEndpoint(upstream.endpointId)"
+                class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0"
+                style="background: rgba(139,92,246,0.12); color: #7c3aed; border: 1px solid rgba(139,92,246,0.25);">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="3" width="20" height="14" rx="2" />
+                  <path d="M8 21h8M12 17v4" />
+                </svg>
+                {{ getAgentForEndpoint(upstream.endpointId)!.name }}
+              </span>
             </div>
             <div v-if="upstream.status === 'error' && upstream.lastError" class="relative"
               @mouseenter="showErrorTip($event, upstream)" @mouseleave="hideErrorTip">

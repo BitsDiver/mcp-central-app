@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, computed } from 'vue';
+  import { ref, computed, onMounted } from 'vue';
   import AppLayout from '@/components/layout/AppLayout.vue';
   import AppButton from '@/components/ui/AppButton.vue';
   import AppModal from '@/components/ui/AppModal.vue';
@@ -10,11 +10,17 @@
   import type { RegistryServer } from '@/data/mcpRegistry';
   import { useRegistry } from '@/composables/useRegistry';
   import { useEndpointStore } from '@/stores/endpoints';
+  import { useAgentStore } from '@/stores/agents';
   import { useError } from '@/composables/useError';
 
   const endpointStore = useEndpointStore();
+  const agentStore = useAgentStore();
   const { resolveMessage } = useError();
   const { servers, categories, isLoading } = useRegistry();
+
+  onMounted(async () => {
+    if (agentStore.agents.length === 0) await agentStore.load();
+  });
 
   const search = ref('');
   const activeCategory = ref('All');
@@ -24,6 +30,7 @@
 
   const configServer = ref<RegistryServer | null>(null);
   const configEnvValues = ref<Record<string, string>>({});
+  const configAgentId = ref<string>('');
   const configSubmitting = ref(false);
   const configError = ref<string | null>(null);
 
@@ -58,44 +65,13 @@
   function openConfig(server: RegistryServer) {
     configServer.value = server;
     configEnvValues.value = {};
+    configAgentId.value = '';
     if (server.envVars) {
       for (const v of server.envVars) {
         configEnvValues.value[v.key] = '';
       }
     }
     configError.value = null;
-  }
-
-  async function quickAdd(server: RegistryServer) {
-    if (server.envVars && server.envVars.some((v) => v.required)) {
-      openConfig(server);
-      return;
-    }
-    addingId.value = server.id;
-    errorMessage.value = null;
-    try {
-      const payload: Record<string, unknown> = {
-        name: server.name,
-        namespace: server.namespace,
-        transport: server.transport,
-        isEnabled: true,
-      };
-      if (server.transport === 'stdio') {
-        payload.command = server.command;
-        payload.args = server.args ?? [];
-        payload.env = {};
-      } else {
-        payload.url = server.url;
-        payload.headers = {};
-      }
-      await endpointStore.create(payload);
-      successId.value = server.id;
-      setTimeout(() => (successId.value = null), 3000);
-    } catch (err) {
-      errorMessage.value = resolveMessage(err);
-    } finally {
-      addingId.value = null;
-    }
   }
 
   async function submitConfig() {
@@ -118,6 +94,7 @@
         payload.url = server.url;
         payload.headers = {};
       }
+      if (configAgentId.value) payload.agentId = configAgentId.value;
       await endpointStore.create(payload);
       successId.value = server.id;
       setTimeout(() => (successId.value = null), 3000);
@@ -190,14 +167,14 @@
           <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">{{ category }}</h2>
           <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             <ServerCard v-for="server in groupServers" :key="server.id" :server="server" :added="isAdded(server)"
-              :adding="addingId === server.id" :success="successId === server.id" @add="quickAdd(server)" />
+              :adding="addingId === server.id" :success="successId === server.id" @add="openConfig(server)" />
           </div>
         </div>
       </template>
 
       <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         <ServerCard v-for="server in filtered" :key="server.id" :server="server" :added="isAdded(server)"
-          :adding="addingId === server.id" :success="successId === server.id" @add="quickAdd(server)" />
+          :adding="addingId === server.id" :success="successId === server.id" @add="openConfig(server)" />
         <div v-if="filtered.length === 0" class="col-span-3 py-16 text-center">
           <p class="text-sm" style="color: var(--text-tertiary);">No servers match your search.</p>
         </div>
@@ -217,7 +194,7 @@
               :label="`${envVar.key}${envVar.required ? '' : ' (optional)'}`" :placeholder="envVar.placeholder ?? ''"
               :id="`env-${envVar.key}`" />
             <p v-if="envVar.description" class="text-xs mt-1" style="color: var(--text-tertiary);">{{ envVar.description
-            }}
+              }}
             </p>
           </div>
         </div>
@@ -226,6 +203,20 @@
           This will create an endpoint with namespace <code class="font-mono px-1 rounded"
             style="background: var(--bg-surface);">{{ configServer.namespace }}</code>. You can modify it later from the
           Endpoints page.
+        </div>
+        <!-- Agent select for stdio servers -->
+        <div v-if="configServer.transport === 'stdio' && agentStore.agents.length > 0">
+          <label class="block text-sm font-medium mb-1" style="color: var(--text-primary);">Deploy on agent</label>
+          <select v-model="configAgentId" class="w-full px-3 py-2 text-sm rounded-lg border outline-none"
+            style="background: var(--bg-input); color: var(--text-primary); border-color: var(--border-default);">
+            <option value="">None (direct connection)</option>
+            <option v-for="agent in agentStore.agents" :key="agent.id" :value="agent.id">
+              {{ agent.name }}{{ agent.isConnected ? ' ●' : ' ○' }}
+            </option>
+          </select>
+          <p v-if="!configAgentId" class="text-xs mt-1" style="color: #ca8a04;">
+            stdio servers require a local agent to run. Select one above.
+          </p>
         </div>
       </div>
       <template #footer>

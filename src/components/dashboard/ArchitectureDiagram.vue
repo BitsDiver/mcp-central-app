@@ -2,20 +2,31 @@
   import { computed, ref } from 'vue';
   import { useStatusStore } from '@/stores/status';
   import { useToolStore } from '@/stores/tools';
+  import { useEndpointStore } from '@/stores/endpoints';
+  import { useAgentStore } from '@/stores/agents';
 
   const statusStore = useStatusStore();
   const toolStore = useToolStore();
+  const endpointStore = useEndpointStore();
+  const agentStore = useAgentStore();
 
-  /** All upstreams — no artificial cap, container scrolls instead */
-  const upstreams = computed(() => {
-    if (statusStore.upstreams.length === 0) {
-      return [
-        { endpointId: 'placeholder-1', namespace: 'github', status: 'connected', toolCount: 0, lastError: null, lastConnectedAt: null },
-        { endpointId: 'placeholder-2', namespace: 'postgres', status: 'connected', toolCount: 0, lastError: null, lastConnectedAt: null },
-        { endpointId: 'placeholder-3', namespace: 'memory', status: 'disconnected', toolCount: 0, lastError: null, lastConnectedAt: null },
-      ];
-    }
-    return statusStore.upstreams;
+  /** Upstreams without an agent — shown in the main row */
+  const directUpstreams = computed(() => {
+    return statusStore.upstreams.filter((u) => {
+      const ep = endpointStore.endpoints.find((e) => e.id === u.endpointId);
+      return !ep?.agentId;
+    });
+  });
+
+  /** One cluster per registered agent — shown even if offline or no endpoints */
+  const agentClusters = computed(() => {
+    return agentStore.agents.map((agent) => {
+      const agentEpIds = new Set(
+        endpointStore.endpoints.filter((e) => e.agentId === agent.id).map((e) => e.id),
+      );
+      const upstreams = statusStore.upstreams.filter((u) => agentEpIds.has(u.endpointId));
+      return { agent, agentEpIds, upstreams };
+    });
   });
 
   /** Map endpointId → list of tool originalNames for hover tooltips */
@@ -39,7 +50,7 @@
   };
 
   // ── Click-to-open tool panel (Teleported) ──────────────
-  type UpstreamRow = (typeof upstreams.value)[number];
+  type UpstreamRow = (typeof directUpstreams.value)[number];
   const activeEndpoint = ref<UpstreamRow | null>(null);
   const tooltipPos = ref({ x: 0, y: 0 });
   const TOOLTIP_W = 232;   // 224px width + 8px gap
@@ -175,7 +186,7 @@
       <div class="endpoints-column">
         <div class="endpoints-scroll">
 
-          <div v-for="upstream in upstreams" :key="upstream.endpointId" class="endpoint-row"
+          <div v-for="upstream in directUpstreams" :key="upstream.endpointId" class="endpoint-row"
             :class="{ 'endpoint-row--active': activeEndpoint?.endpointId === upstream.endpointId }"
             style="background: var(--bg-muted); border-color: var(--border-default);"
             @click="toggleEndpointPanel($event, upstream)">
@@ -183,24 +194,102 @@
             <span class="w-2 h-2 rounded-full shrink-0" :style="`background: ${statusColor(upstream.status)}`"></span>
             <!-- Namespace (truncated, no status text) -->
             <span class="text-xs font-medium truncate" style="color: var(--text-primary);">{{ upstream.namespace
-            }}</span>
+              }}</span>
             <!-- Tool count badge -->
             <span v-if="upstream.toolCount > 0" class="tool-badge shrink-0">{{ upstream.toolCount }}</span>
           </div>
 
-          <!-- Empty state -->
-          <div v-if="statusStore.upstreams.length === 0"
-            class="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed"
-            style="border-color: var(--border-default);">
-            <span class="text-xs" style="color: var(--text-tertiary);">No servers yet —</span>
-            <router-link to="/endpoints" class="text-xs text-blue-500 hover:underline">add one</router-link>
-          </div>
+          <!-- Empty state: no direct endpoints yet -->
+          <router-link v-if="directUpstreams.length === 0" to="/endpoints" class="endpoint-row border-dashed"
+            style="border-color: var(--border-default); text-decoration: none;">
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" style="color: var(--text-tertiary); flex-shrink: 0;">
+              <line x1="7" y1="1" x2="7" y2="13" />
+              <line x1="1" y1="7" x2="13" y2="7" />
+            </svg>
+            <span class="text-xs" style="color: var(--text-tertiary);">Add endpoint</span>
+          </router-link>
         </div>
 
         <!-- Scroll hint when many endpoints -->
-        <p v-if="statusStore.upstreams.length > 5" class="overflow-hint" style="color: var(--text-tertiary);">
-          {{ statusStore.upstreams.length }} servers · scroll ↑↓
+        <p v-if="directUpstreams.length > 5" class="overflow-hint" style="color: var(--text-tertiary);">
+          {{ directUpstreams.length }} servers · scroll ↑↓
         </p>
+      </div>
+    </div>
+
+    <!-- ── Vertical connector: local agents → central-MCP ── -->
+    <div v-if="agentStore.agents.length > 0" class="agents-branch">
+      <!-- Arrow at top pointing UP (agents tunnel up to central-MCP) -->
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="#8b5cf6">
+        <path d="M2 9l4-6 4 6z" />
+      </svg>
+      <div class="agents-branch-line"></div>
+    </div>
+
+    <!-- ── Agent tunnel rows ─────────────────────────────── -->
+    <div v-if="agentStore.agents.length > 0" class="agents-outer">
+      <div class="agents-outer-header">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2">
+          <rect x="2" y="3" width="20" height="14" rx="2" />
+          <path d="M8 21h8M12 17v4" />
+        </svg>
+        <span>Via local agents</span>
+      </div>
+      <div v-for="cluster in agentClusters" :key="cluster.agent.id" class="agent-tunnel-row">
+        <!-- Orange agent node -->
+        <div class="arch-node">
+          <div class="arch-node-icon" style="background: rgba(139,92,246,0.10); border-color: #8b5cf6;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="1.75">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <path d="M8 21h8M12 17v4" />
+            </svg>
+          </div>
+          <span class="arch-node-label" style="color: #8b5cf6;">{{ cluster.agent.name }}</span>
+          <span class="arch-node-sub"
+            :style="cluster.agent.isConnected ? 'color:#16a34a' : 'color:var(--text-tertiary)'">
+            {{ cluster.agent.isConnected ? '● Online' : '○ Offline' }}
+          </span>
+        </div>
+
+        <!-- Connector: Agent Tunnel -->
+        <div class="arch-connector">
+          <div class="arch-connector-track">
+            <div class="arch-connector-line" style="background: rgba(139,92,246,0.4);"></div>
+            <svg class="arch-connector-arrow" width="12" height="12" viewBox="0 0 12 12" fill="#8b5cf6">
+              <path d="M3 2l6 4-6 4z" />
+            </svg>
+          </div>
+          <span class="arch-connector-label" style="color: #8b5cf6;">Agent Tunnel</span>
+        </div>
+
+        <!-- Endpoints for this agent -->
+        <div class="endpoints-column">
+          <div class="endpoints-scroll">
+            <div v-for="upstream in cluster.upstreams" :key="upstream.endpointId" class="endpoint-row"
+              :class="{ 'endpoint-row--active': activeEndpoint?.endpointId === upstream.endpointId }"
+              style="background: var(--bg-muted); border-color: rgba(139,92,246,0.2);"
+              @click="toggleEndpointPanel($event, upstream)">
+              <span class="w-2 h-2 rounded-full shrink-0" :style="`background: ${statusColor(upstream.status)}`"></span>
+              <span class="text-xs font-medium truncate" style="color: var(--text-primary);">{{ upstream.namespace
+              }}</span>
+              <span v-if="upstream.toolCount > 0" class="tool-badge shrink-0">{{ upstream.toolCount }}</span>
+            </div>
+            <!-- Empty state: agent registered but no endpoints assigned yet -->
+            <router-link v-if="cluster.agentEpIds.size === 0" to="/endpoints" class="endpoint-row border-dashed"
+              style="border-color: rgba(139,92,246,0.3); text-decoration: none;">
+              <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="#8b5cf6" stroke-width="2"
+                stroke-linecap="round" style="flex-shrink: 0;">
+                <line x1="7" y1="1" x2="7" y2="13" />
+                <line x1="1" y1="7" x2="13" y2="7" />
+              </svg>
+              <span class="text-xs" style="color: #8b5cf6;">Add endpoint</span>
+            </router-link>
+          </div>
+          <p v-if="cluster.upstreams.length > 5" class="overflow-hint" style="color: var(--text-tertiary);">
+            {{ cluster.upstreams.length }} servers · scroll ↑↓
+          </p>
+        </div>
       </div>
     </div>
 
@@ -266,6 +355,10 @@
       <div class="flex items-center gap-1.5">
         <span class="w-2.5 h-2.5 rounded-full bg-gray-400"></span>
         <span style="color: var(--text-secondary);">Disconnected</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="w-2.5 h-2.5 rounded-full" style="background: #8b5cf6;"></span>
+        <span style="color: var(--text-secondary);">Local Agent</span>
       </div>
       <div class="ml-auto text-[11px]" style="color: var(--text-tertiary);">
         AI client authenticates with the tenant API key. Each upstream server uses its own credentials.
@@ -634,6 +727,83 @@
     font-size: 10px;
     text-align: center;
     padding-top: 2px;
+  }
+
+  /* ── Agent tunnel rows ──────────────────────────────────── */
+  .agents-outer {
+    position: relative;
+    margin-top: 12px;
+    padding: 12px 12px 8px;
+    border-radius: 10px;
+    border: 1px dashed rgba(139, 92, 246, 0.3);
+    background: rgba(139, 92, 246, 0.03);
+  }
+
+  /* Desktop: shift right to visually align with central-MCP */
+  @media (min-width: 640px) {
+    .agents-outer {
+      width: 55%;
+      margin-left: auto;
+      margin-top: 0;
+      /* branch div already provides spacing */
+    }
+  }
+
+  /* Vertical branch line connecting arch-row → agents-outer */
+  .agents-branch {
+    display: none;
+  }
+
+  @media (min-width: 640px) {
+    .agents-branch {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      /* margin-left: 5rem; */
+      /* 7rem (Your machine) + 3.5rem (half agent node) */
+      margin-top: 6px;
+      margin-bottom: 2px;
+    }
+  }
+
+  .agents-branch-line {
+    width: 1px;
+    height: 18px;
+    background: rgba(139, 92, 246, 0.4);
+    border-radius: 1px;
+  }
+
+  .agents-outer-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #8b5cf6;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .agent-tunnel-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 6px 0;
+    border-top: 1px solid rgba(139, 92, 246, 0.12);
+  }
+
+  .agent-tunnel-row:first-of-type {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  @media (min-width: 640px) {
+    .agent-tunnel-row {
+      flex-direction: row;
+      align-items: center;
+    }
   }
 
   /* ── Tooltip transition ─────────────────────────────────── */

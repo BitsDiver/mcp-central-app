@@ -14,6 +14,8 @@ export const useSocketStore = defineStore("socket", () => {
   function connect(token: string): void {
     const { tenants, endpoints, tools } = connectAll(token);
     bindEvents(tenants, endpoints, tools);
+    // agent namespace is connected (for AgentService CRUD + live events)
+    // but its socket listeners are managed by the agentStore separately.
   }
 
   function bindEvents(tenants: Socket, endpoints: Socket, tools: Socket): void {
@@ -34,8 +36,18 @@ export const useSocketStore = defineStore("socket", () => {
       "connection_status",
       (payload: Partial<UpstreamStatus> & { endpointId: string }) => {
         const statusStore = useStatusStore();
-        statusStore.updateUpstream(payload);
         const endpointStore = useEndpointStore();
+        // If we receive a final "disconnected" push for an endpoint that no
+        // longer exists in our local list, it means the endpoint was deleted
+        // on another session — remove the zombie upstream entry.
+        if (
+          payload.status === "disconnected" &&
+          !endpointStore.endpoints.find((e) => e.id === payload.endpointId)
+        ) {
+          statusStore.removeUpstream(payload.endpointId);
+          return;
+        }
+        statusStore.updateUpstream(payload);
         if (payload.endpointId) {
           endpointStore.updateFromSocket(payload.endpointId, {
             toolCount: payload.toolCount ?? 0,
@@ -52,7 +64,7 @@ export const useSocketStore = defineStore("socket", () => {
   async function selectTenant(tenantId: string): Promise<void> {
     // selectTenant must be called on every namespace so each socket joins
     // the tenant room and subsequent broadcasts reach all of them.
-    const namespaces = ["tenants", "endpoints", "tools", "keys"];
+    const namespaces = ["tenants", "endpoints", "tools", "keys", "agent"];
     await Promise.all(
       namespaces.map(
         (ns) =>

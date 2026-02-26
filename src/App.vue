@@ -6,6 +6,7 @@
   import { useTenantStore } from '@/stores/tenant';
   import { useSocketStore } from '@/stores/socket';
   import { useEndpointStore } from '@/stores/endpoints';
+  import { useAgentStore } from '@/stores/agents';
   import { useToolStore } from '@/stores/tools';
   import { useStatusStore } from '@/stores/status';
   import { useDarkMode } from '@/composables/useDarkMode';
@@ -21,6 +22,7 @@
   const tenantStore = useTenantStore();
   const socketStore = useSocketStore();
   const endpointStore = useEndpointStore();
+  const agentStore = useAgentStore();
   const toolStore = useToolStore();
   const statusStore = useStatusStore();
   const toast = useToastStore();
@@ -62,6 +64,7 @@
           // that were queued while this init was running (e.g. views' onMounted hooks
           // on a page reload, which fire before App.vue completes).
           markSocketReady();
+          agentStore.setupSocketListeners();
 
           // Connect admin-only users socket
           if (authStore.isAdmin) {
@@ -78,6 +81,7 @@
             endpointStore.load(),
             toolStore.load(),
             statusStore.load(),
+            agentStore.load(),
           ]);
         }
 
