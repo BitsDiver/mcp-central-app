@@ -2,9 +2,20 @@
 # mcp-central-app — Frontend release
 #
 # Triggers when a version tag (v*) is pushed.
-# Builds the Vite app and publishes the `dist/` folder as a
-# tarball attached to a rolling GitHub release (tag: frontend-latest).
-# The backend CI pulls this artifact to embed the UI in its Docker image.
+# Builds the Vite app and publishes the dist/ folder as a tarball:
+#   - A versioned release (v1.2.3) — immutable, for history
+#   - A rolling "frontend-latest" release — consumed by backend CI
+#
+# The frontend-latest git tag is deleted and recreated on every run
+# so the backend CI always downloads the freshest artifact.
+#
+# Required secrets (Settings → Secrets → Actions):
+#   VITE_AUTH0_DOMAIN      — Auth0 domain (public, safe to embed)
+#   VITE_AUTH0_CLIENT_ID   — Auth0 client ID (public, safe to embed)
+#   VITE_AUTH0_AUDIENCE    — Auth0 audience (public, safe to embed)
+#
+# Required variable (Settings → Variables → Actions):
+#   VITE_API_BASE_URL      — Backend URL, e.g. https://app.mcp-central.io
 # ──────────────────────────────────────────────────────────────
 
 name: Release frontend
@@ -12,11 +23,11 @@ name: Release frontend
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
-  contents: write   # required to create / update GitHub Releases
+  contents: write # required to create / update GitHub Releases
 
 jobs:
   build-and-release:
@@ -46,18 +57,43 @@ jobs:
 
       - name: Build
         run: pnpm run build
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_AUTH0_DOMAIN: ${{ secrets.VITE_AUTH0_DOMAIN }}
+          VITE_AUTH0_CLIENT_ID: ${{ secrets.VITE_AUTH0_CLIENT_ID }}
+          VITE_AUTH0_AUDIENCE: ${{ secrets.VITE_AUTH0_AUDIENCE }}
 
       # ── Package dist/ ────────────────────────────────────────
       - name: Create dist archive
         run: tar -czf dist.tar.gz -C dist .
 
-      # ── Publish (rolling "frontend-latest" release) ──────────
-      - name: Update GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: frontend-latest
-          name: "Frontend — latest build (${{ github.ref_name }})"
-          prerelease: true
-          body: |
-            Built from tag **${{ github.ref_name }}** (commit `${{ github.sha }}`).
-          files: dist.tar.gz
+      # ── Versioned release (v1.2.3) — immutable, pour historique ──
+      - name: Publish versioned release
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "Frontend ${{ github.ref_name }}" \
+            --notes "Built from commit \`${{ github.sha }}\`" \
+            dist.tar.gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Rolling latest — consommé par le backend CI ──────────
+      # Supprime la release ET le git tag existants avant de recréer
+      # les deux pointant sur le commit courant. Sans ce delete,
+      # GitHub refuse la mise à jour du tag → le backend CI
+      # téléchargerait un artefact périmé. Le "|| true" gère
+      # proprement le cas du premier run où le tag n'existe pas encore.
+      - name: Delete existing frontend-latest release
+        run: gh release delete frontend-latest --yes --cleanup-tag || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish rolling frontend-latest release
+        run: |
+          gh release create frontend-latest \
+            --prerelease \
+            --title "Frontend — latest build (${{ github.ref_name }})" \
+            --notes "Built from **${{ github.ref_name }}** (commit \`${{ github.sha }}\`)" \
+            dist.tar.gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
