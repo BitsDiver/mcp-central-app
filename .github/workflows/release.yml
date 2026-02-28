@@ -2,12 +2,10 @@
 # mcp-central-app — Frontend release
 #
 # Triggers when a version tag (v*) is pushed.
-# Builds the Vite app and publishes the dist/ folder as a tarball:
-#   - Attaché à la release versionnée existante (v1.2.3) — pour historique
-#   - A rolling "frontend-latest" release — consumed by backend CI
-#
-# The frontend-latest git tag is deleted and recreated on every run
-# so the backend CI always downloads the freshest artifact.
+# Builds the Vite app et attache dist.tar.gz à la release versionnée
+# existante (créée par GitHub lors du push du tag v*).
+# Le backend CI télécharge automatiquement la dernière release via
+# `gh release download` sans tag = dernière release non-prerelease.
 #
 # Required secrets (Settings → Secrets → Actions):
 #   VITE_AUTH0_DOMAIN      — Auth0 domain (public, safe to embed)
@@ -67,31 +65,11 @@ jobs:
       - name: Create dist archive
         run: tar -czf dist.tar.gz -C dist .
 
-      # ── Versioned release (v1.2.3) — immutable, pour historique ──
-      # La release versionnée est déjà créée sur GitHub (c'est elle qui
-      # a déclenché ce workflow via push: tags: v*). On y attache juste l'artefact.
+      # ── Upload à la release versionnée ───────────────────────
+      # La release est déjà créée par GitHub lors du push du tag v*.
+      # On y attache simplement l'artefact. Le backend CI la récupère
+      # via `gh release download` (sans tag = dernière non-prerelease).
       - name: Upload artifact to versioned release
         run: gh release upload "${{ github.ref_name }}" dist.tar.gz
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # ── Rolling latest — consommé par le backend CI ──────────
-      # Supprime la release ET le git tag existants avant de recréer
-      # les deux pointant sur le commit courant. Sans ce delete,
-      # GitHub refuse la mise à jour du tag → le backend CI
-      # téléchargerait un artefact périmé. Le "|| true" gère
-      # proprement le cas du premier run où le tag n'existe pas encore.
-      - name: Delete existing frontend-latest release
-        run: gh release delete frontend-latest --yes --cleanup-tag || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish rolling frontend-latest release
-        run: |
-          gh release create frontend-latest \
-            --prerelease \
-            --title "Frontend — latest build (${{ github.ref_name }})" \
-            --notes "Built from **${{ github.ref_name }}** (commit \`${{ github.sha }}\`)" \
-            dist.tar.gz
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
