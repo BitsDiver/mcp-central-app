@@ -3,7 +3,7 @@
 #
 # Triggers when a version tag (v*) is pushed.
 # Builds the Vite app and publishes the dist/ folder as a tarball:
-#   - A versioned release (v1.2.3) — immutable, for history
+#   - Attaché à la release versionnée existante (v1.2.3) — pour historique
 #   - A rolling "frontend-latest" release — consumed by backend CI
 #
 # The frontend-latest git tag is deleted and recreated on every run
@@ -68,12 +68,10 @@ jobs:
         run: tar -czf dist.tar.gz -C dist .
 
       # ── Versioned release (v1.2.3) — immutable, pour historique ──
-      - name: Publish versioned release
-        run: |
-          gh release create "${{ github.ref_name }}" \
-            --title "Frontend ${{ github.ref_name }}" \
-            --notes "Built from commit \`${{ github.sha }}\`" \
-            dist.tar.gz
+      # La release versionnée est déjà créée sur GitHub (c'est elle qui
+      # a déclenché ce workflow via push: tags: v*). On y attache juste l'artefact.
+      - name: Upload artifact to versioned release
+        run: gh release upload "${{ github.ref_name }}" dist.tar.gz
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
