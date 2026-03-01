@@ -89,21 +89,40 @@ src/
 ├── api/
 │   ├── client.ts          # fetch wrapper for REST /setup/* (Auth0 JWT)
 │   ├── socket.ts          # Socket.IO namespace factory + emit helpers
-│   └── mcpClient.ts       # MCP Streamable HTTP client (Ollama tool calls)
+│   ├── mcpClient.ts       # MCP Streamable HTTP client (Ollama tool calls)
+│   └── chatTransport.ts   # HTTP SSE transport: Vercel AI SDK stream parser,
+│                          # UIMessage ↔ ChatMessage conversion
 ├── composables/
-│   ├── useChat.ts          # Unified chat dispatcher (Ollama ↔ backend)
-│   ├── useChatMcpKey.ts    # Resolves tenant API key for MCP tool calls
-│   ├── useDarkMode.ts      # Dark/light mode (localStorage)
-│   ├── useError.ts         # Error normalisation helpers
-│   ├── useMarkdown.ts      # Marked + DOMPurify rendering
-│   ├── useOllama.ts        # Direct Ollama streaming integration
-│   └── useRegistry.ts      # MCP registry helpers
+│   ├── useChat.ts              # Unified chat dispatcher (Ollama ↔ HTTP SSE)
+│   ├── useChatGeneration.ts    # Main orchestrator: handleSend/handleRetry,
+│   │                           # routes to Ask / Plan / Agent based on chatMode
+│   ├── useChatMcpSession.ts    # Auto-provisions MCP chat-key per tenant
+│   │                           # via GET /api/ai-keys/mcp-session
+│   ├── useChatMcpKey.ts        # Resolves tenant API key for MCP tool calls
+│   ├── usePlanning.ts          # Plan generation: streams structured markdown
+│   │                           # (# Title / ## Task) parsed into AgentPlan
+│   ├── useAgentOrchestrator.ts # Executes approved plans: parallel groups via
+│   │                           # Promise.all, isolated useChat() per task
+│   ├── useContextSummarizer.ts # Context compression at ≥85% window usage:
+│   │                           # summarises older messages, keeps recent pairs
+│   ├── useDarkMode.ts          # Dark/light mode (localStorage)
+│   ├── useError.ts             # Error normalisation helpers
+│   ├── useMarkdown.ts          # Marked + DOMPurify rendering
+│   ├── useOllama.ts            # Direct Ollama streaming (agentic loop,
+│   │                           # thinking/reasoning support)
+│   ├── useRegistry.ts          # MCP registry helpers
+│   └── useSidebarResize.ts     # Draggable sidebar resize
 ├── components/
 │   ├── layout/             # AppLayout, AppSidebar, AppHeader,
 │   │                       # TenantSwitcher, MobileMenuButton
 │   ├── ui/                 # Design system (see below)
 │   ├── chat/               # ChatSessionList, ChatMessage, ChatInput,
-│   │                       # ToolCallBlock, ThinkingBlock
+│   │                       # ChatMessagesArea, ChatTopBar, ChatHintBar,
+│   │                       # ChatErrorBanner, ChatModeSelector,
+│   │                       # ChatSessionPromptBar, ModelSelector,
+│   │                       # ToolCallBlock, ThinkingBlock, PlanBlock,
+│   │                       # ToolManagerModal, ContextRing,
+│   │                       # ContextDetailPopover
 │   ├── dashboard/          # ArchitectureDiagram, VscodeConfigButton
 │   ├── endpoints/          # RegistryPickerModal
 │   ├── registry/           # ServerCard
@@ -158,9 +177,10 @@ src/
 | `status`       | `status.ts`     | Upstream connection statuses (real-time)           |
 | `tenant`       | `tenant.ts`     | Active tenant, tenant list, API key selection      |
 | `toast`        | `toast.ts`      | Toast notification queue                           |
-| `tools`        | `tools.ts`      | Aggregated tool list (real-time)                   |
-| `users`        | `users.ts`      | Admin — user list + role management                |
-| `aiKeys`       | `aiKeys.ts`     | Per-user LLM provider key management               |
+| `tools`        | `tools.ts`        | Aggregated tool list + enable/disable per tool     |
+| `users`        | `users.ts`        | Admin — user list + role management                |
+| `aiKeys`       | `aiKeys.ts`       | Per-user LLM provider key management               |
+| `agentPlanning`| `agentPlanning.ts`| Plan approval flow, task CRUD, execution status    |
 
 ---
 
@@ -188,15 +208,21 @@ has a dedicated `connect*`, `disconnect*`, and `emit*` helper exported from
 | `/endpoints` | `endpoints`, `status`      | `connection_status`, endpoint CRUD        |
 | `/tools`     | `tools`                    | `tools_changed`, tool queries             |
 | `/keys`      | `tenant`                   | API key CRUD                              |
-| `/chat`      | `chatSettings`, `aiKeys`   | `chat:token`, `chat:tool_start`, `chat:tool_done`, `chat:done`, `chat:error` |
 | `/users`     | `users`                    | User list, role updates (admin only)      |
 | `/i18n`      | _(global)_                 | Error code + key translation (public)     |
+
+> **Removed:** The `/chat` namespace was removed. LLM generation and AI key
+> management are now handled via HTTP (`POST /api/chat` and `/api/ai-keys`).
 
 #### Socket readiness gate
 
 `socket.ts` exports `markSocketReady()` / `resetSocketReady()`. All `emit()`
 calls are queued until `markSocketReady()` is called from `App.vue` after full
 initialisation. This prevents race conditions on page reload.
+
+> **Note:** The `/chat` namespace no longer exists. LLM generation was migrated
+> to stateless HTTP SSE (`POST /api/chat`). Socket.IO is still used for all
+> other real-time features (endpoints, tools, keys, tenants, users).
 
 ### MCP Streamable HTTP (`src/api/mcpClient.ts`)
 
@@ -206,51 +232,116 @@ A thin client used exclusively by the **Ollama** chat path to call MCP tools.
 - On 404 (server restart), transparently re-initialises the session and retries once.
 - Methods: `initialize(key)`, `callTool(name, args, key)`, `deleteSession()`.
 
+### HTTP SSE Transport (`src/api/chatTransport.ts`)
+
+Streamline transport for **all non-Ollama providers** (OpenAI, Anthropic,
+Gemini, GitHub Models). Posts to the backend `POST /api/chat` and parses
+the Vercel AI SDK UIMessageStream SSE response.
+
+- Uses `parseJsonEventStream()` + `uiMessageChunkSchema` from the `ai` npm
+  package (client-side only for SSE parsing).
+- Converts `ChatMessage[]` → `UIMessage[]` (parts-based wire format).
+- Maps SSE chunk types to callbacks:
+  - `text-delta` → `onToken` (cumulative text)
+  - `reasoning-delta` → thinking in `onToken`
+  - `tool-input-available` / `tool-output-available` / `tool-output-error` → `onToolCall`
+  - `finish` → `onDone` with token usage
+  - `error` / `abort` → `onError`
+
 ---
 
 ## Chat System
 
+The chat system was migrated from a **Socket.IO `/chat` namespace** to a
+**stateless HTTP SSE architecture** powered by **Vercel AI SDK** (`ai` npm
+package) on both the backend and frontend.
+
+### Chat Modes
+
+The user selects a mode via `ChatModeSelector` in the input area. The mode
+is persisted in `chatSettings.chatMode`.
+
+| Mode      | Description                                                                                    |
+| --------- | ---------------------------------------------------------------------------------------------- |
+| **Ask**   | Single-turn generation. The LLM responds with text and may call tools (agentic loop on backend).|
+| **Plan**  | The LLM generates a structured plan (title + tasks). The user can edit, approve, or reject.     |
+| **Agent** | An approved plan is executed: each task is run as an isolated LLM generation with tool access.  |
+
+### Generation orchestration (`useChatGeneration.ts`)
+
+`useChatGeneration` is the main entry point called by `ChatView.vue`. It
+routes to the appropriate execution path based on mode:
+
+- **Ask** → `useChat().generate()` directly.
+- **Plan** → `usePlanning().createPlan()` streams a markdown plan, parsed
+  into an `AgentPlan` with `parseMarkdownPlan()`.
+- **Agent** → `useAgentOrchestrator().runAgentMode()` waits for plan
+  approval via the `agentPlanning` store, then executes.
+
 ### Provider dispatch (`src/composables/useChat.ts`)
 
-`useChat` is the single entry point for all chat generation. It dispatches
-based on `chatSettings.settings.provider`:
+`useChat` dispatches based on `chatSettings.settings.provider`:
 
-| Provider     | Execution path | Tool call path            |
-| ------------ | -------------- | ------------------------- |
-| `"ollama"`   | `useOllama` (direct browser fetch to Ollama) | `mcpClient.ts` → backend `/mcp` |
-| `"openai"`   | Socket.IO `/chat` → backend `ChatService`    | `McpProxyManager` (server-side) |
-| `"anthropic"`| Socket.IO `/chat` → backend `ChatService`    | `McpProxyManager` (server-side) |
-| `"gemini"`   | Socket.IO `/chat` → backend `ChatService`    | `McpProxyManager` (server-side) |
+| Provider      | Execution path                     | Tool call path                        |
+| ------------- | ---------------------------------- | ------------------------------------- |
+| `"ollama"`    | `useOllama` (direct browser fetch) | `mcpClient.ts` → backend `/mcp`      |
+| `"openai"`    | HTTP SSE → `ChatController`        | `McpProxyManager` (server-side)       |
+| `"anthropic"` | HTTP SSE → `ChatController`        | `McpProxyManager` (server-side)       |
+| `"gemini"`    | HTTP SSE → `ChatController`        | `McpProxyManager` (server-side)       |
+| `"github"`    | HTTP SSE → `ChatController`        | `McpProxyManager` (server-side)       |
 
-The `generate(opts: GenerateOpts)` signature is identical for all providers,
-so `ChatView.vue` is fully provider-agnostic.
+For non-Ollama providers, the backend's `ChatController` uses Vercel AI SDK's
+`streamText()` with `stepCountIs(maxIterations)` for agentic tool-call loops.
+SSE is streamed via `pipeUIMessageStreamToResponse()` through Fastify's
+`reply.hijack()`.
 
-### Backend streaming events (`/chat` namespace)
+### Plan generation (`usePlanning.ts`)
 
-During a `chat` event the backend emits (server → client):
+Streams a structured markdown prompt to the LLM. The response is parsed into
+an `AgentPlan { title, parallelGroups: AgentTask[][] }`. The user can edit
+tasks (add, remove, reorder, rename) before approving. First-person
+noun-phrase planning prompt for natural task decomposition.
 
-| Event              | Payload                                              |
-| ------------------ | ---------------------------------------------------- |
-| `chat:token`       | `{ content: string, thinking?: string }`             |
-| `chat:tool_start`  | `{ id, name, args }`                                 |
-| `chat:tool_done`   | `{ id, name, result?, error?, status }`              |
-| `chat:done`        | `{ content, thinking?, usage? }`                     |
-| `chat:error`       | `{ message: string }`                                |
+### Agent execution (`useAgentOrchestrator.ts`)
 
-`thinking` is populated for Anthropic extended thinking and rendered by
-`ThinkingBlock.vue` as a collapsible section.
+After approval, parallel groups execute with `Promise.all`, sequential groups
+run in order. Each task gets an isolated `useChat()` instance. It respects
+the session system prompt override: `task.systemPrompt ?? sessionSystemPrompt
+?? settings.systemPrompt`.
+
+### Context window summarization (`useContextSummarizer.ts`)
+
+When token usage reaches ≥85% of the context window, older messages are
+compressed into a summary. The last 4 user/assistant pairs are kept verbatim.
+Falls back to character-based estimation when token count is unavailable.
+
+### System prompt composition
+
+In **Ask** mode, only the base system prompt is used. In **Plan** and **Agent**
+modes, the base system prompt is concatenated with `PLANNING_SYSTEM_PROMPT`.
+A per-session prompt override can be set via `ChatSessionPromptBar`.
+
+### Tool Manager
+
+The tool count badge in `ChatInput` footer opens `ToolManagerModal`. Tools
+are grouped by endpoint with master + individual toggles. Disabled tools
+are persisted in `localStorage` (`mcp-central:disabled-tools`) and excluded
+from all LLM generation calls via `toolStore.activeTools`.
 
 ### Chat sessions
 
-Sessions (messages, title, tenantId) are persisted in `localStorage` via the
-`chat` store. No session data is stored on the backend.
+Sessions (messages, title, tenantId, systemPrompt?) are persisted in
+`localStorage` via the `chat` store. No session data is stored on the backend.
 
 ### LLM provider key management
 
-OpenAI / Anthropic / Gemini keys are stored **encrypted on the backend** via the
-`aiKeys` store (Socket.IO `/chat` events `saveProviderKey` / `listProviderKeys`
-/ `deleteProviderKey`). The frontend only ever sees the `keyHint` (last 4 chars).
-Keys are never stored in `localStorage`.
+OpenAI / Anthropic / Gemini / GitHub keys are stored **encrypted on the
+backend** via `AiKeysController` HTTP routes (`GET/POST/DELETE /api/ai-keys`).
+The frontend only ever sees the `keyHint` (last 4 chars). Keys are never
+stored in `localStorage`.
+
+MCP session keys are auto-provisioned per tenant via
+`GET /api/ai-keys/mcp-session` (composable `useChatMcpSession.ts`).
 
 ---
 
