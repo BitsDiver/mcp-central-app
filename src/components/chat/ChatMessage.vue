@@ -4,6 +4,8 @@
   import { renderMarkdown } from '@/composables/useMarkdown';
   import ThinkingBlock from './ThinkingBlock.vue';
   import ToolCallBlock from './ToolCallBlock.vue';
+  import PlanBlock from './PlanBlock.vue';
+  import AgentBlock from './AgentBlock.vue';
 
   const props = defineProps<{
     message: ChatMessage;
@@ -17,6 +19,8 @@
 
   const isUser = computed(() => props.message.role === 'user');
   const isTool = computed(() => props.message.role === 'tool');
+  const isPlan = computed(() => props.message.role === 'plan');
+  const isAgent = computed(() => props.message.role === 'agent');
   const isError = computed(() => !!props.message.error);
 
   const formattedTime = computed(() => {
@@ -36,6 +40,17 @@
     <div class="bubble-tool">
       <ToolCallBlock v-for="tc in message.toolCalls" :key="tc.id" :tool-call="tc" />
     </div>
+  </div>
+
+  <!-- Plan message — full-width, PlanBlock UI -->
+  <div v-else-if="isPlan" class="plan-wrapper">
+    <PlanBlock v-if="message.agentPlan" :plan="message.agentPlan" />
+    <p v-else class="text-tertiary" style="font-size:12px">Generating plan…</p>
+  </div>
+
+  <!-- Agent task update message -->
+  <div v-else-if="isAgent" class="agent-wrapper">
+    <AgentBlock v-if="message.agentTask" :task="message.agentTask" />
   </div>
 
   <!-- User / assistant messages -->
@@ -119,6 +134,16 @@
     border: 1px dashed var(--border-default);
     border-radius: var(--radius-md);
     padding: 8px 12px;
+  }
+
+  /* ── Plan messages ────────────────────────────────────────────── */
+  .plan-wrapper {
+    padding: 4px 0;
+  }
+
+  /* ── Agent task messages ──────────────────────────────────────── */
+  .agent-wrapper {
+    padding: 2px 0;
   }
 
   /* ── Row layout ───────────────────────────────────────────────── */

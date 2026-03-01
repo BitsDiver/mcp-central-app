@@ -72,6 +72,11 @@
 
 <template>
     <div class="model-selector">
+        <svg class="selector-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path
+                d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+        </svg>
         <select :value="selectValue" @change="handleChange" class="model-select"
             :title="`${PROVIDER_LABELS[currentProvider]} — ${selectedModel || 'No model selected'}`">
             <template v-for="group in providerGroups" :key="group.provider">
@@ -94,7 +99,13 @@
     .model-selector {
         display: inline-flex;
         align-items: center;
+        gap: 4px;
         min-width: 0;
+    }
+
+    .selector-icon {
+        flex-shrink: 0;
+        color: var(--text-tertiary);
     }
 
     .model-select {

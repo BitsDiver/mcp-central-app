@@ -12,6 +12,9 @@ const STORAGE_KEY = "mcp-chat-settings";
 /** Default maximum number of consecutive tool-call iterations per message. */
 export const DEFAULT_MAX_ITERATIONS = 15;
 
+/** Default chat mode — agent runs the full agentic loop automatically. */
+export const DEFAULT_CHAT_MODE = "agent" as const;
+
 /**
  * Default system prompt for agentic chat sessions.
  * Instructs the model to use tools autonomously and iterate until the task is complete.
@@ -44,6 +47,7 @@ function loadFromStorage(): ChatSettings {
         provider: parsed.provider ?? "ollama",
         perProviderSettings: parsed.perProviderSettings ?? {},
         maxIterations: parsed.maxIterations ?? DEFAULT_MAX_ITERATIONS,
+        chatMode: parsed.chatMode ?? DEFAULT_CHAT_MODE,
       };
     }
   } catch {}
@@ -56,6 +60,7 @@ function loadFromStorage(): ChatSettings {
     provider: "ollama",
     perProviderSettings: {},
     maxIterations: DEFAULT_MAX_ITERATIONS,
+    chatMode: DEFAULT_CHAT_MODE,
   };
 }
 

@@ -150,7 +150,7 @@
           <ChatInput :disabled="!isConfigured" :is-generating="isGenerating"
             :context-usage="usedTokens > 0 ? contextUsage : undefined"
             :context-tokens="usedTokens > 0 ? usedTokens : undefined" :context-size="settingsStore.settings.contextSize"
-            :tool-count="toolStore.tools.length" @send="handleSend" @stop="stop" />
+            :tool-count="toolStore.tools.length" @send="(c, a, m) => handleSend(c, a, m)" @stop="stop" />
         </div>
       </div>
     </div>

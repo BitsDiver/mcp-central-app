@@ -202,6 +202,8 @@
     border-radius: var(--radius-sm);
     padding: 8px;
     margin: 0;
+    max-height: 160px;
+    overflow-y: auto;
     overflow-x: auto;
     white-space: pre-wrap;
     word-break: break-all;

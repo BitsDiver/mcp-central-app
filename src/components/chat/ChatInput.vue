@@ -3,7 +3,12 @@
   import ContextRing from '@/components/chat/ContextRing.vue';
   import ContextDetailPopover from '@/components/chat/ContextDetailPopover.vue';
   import ModelSelector from '@/components/chat/ModelSelector.vue';
-  import type { ChatAttachment } from '@/types';
+  import ChatModeSelector from '@/components/chat/ChatModeSelector.vue';
+  import { useChatSettingsStore } from '@/stores/chatSettings';
+  import type { ChatAttachment, ChatMode } from '@/types';
+
+  const settingsStore = useChatSettingsStore();
+  const currentMode = computed(() => settingsStore.settings.chatMode ?? 'agent');
 
   const props = defineProps<{
     disabled?: boolean;
@@ -16,7 +21,7 @@
   }>();
 
   const emit = defineEmits<{
-    send: [content: string, attachments: ChatAttachment[]];
+    send: [content: string, attachments: ChatAttachment[], mode: ChatMode];
     stop: [];
   }>();
 
@@ -52,7 +57,7 @@
   function sendMessage() {
     const content = text.value.trim();
     if (!content && attachments.value.length === 0) return;
-    emit('send', content, [...attachments.value]);
+    emit('send', content, [...attachments.value], currentMode.value);
     text.value = '';
     attachments.value = [];
     if (textarea.value) {
@@ -153,6 +158,8 @@
     <!-- ── Footer: model selector + tools (left) + send (right) ── -->
     <div class="input-footer">
       <div class="footer-left">
+        <ChatModeSelector />
+        <span class="footer-sep" aria-hidden="true" />
         <ModelSelector />
         <span v-if="toolCount" class="tool-badge" :title="`${toolCount} tool${toolCount !== 1 ? 's' : ''} available`">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -367,14 +374,22 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 2px 6px 6px;
+    padding: 2px 6px 6px 10px;
   }
 
   .footer-left {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     min-width: 0;
+  }
+
+  .footer-sep {
+    width: 1px;
+    height: 12px;
+    background: var(--border-default);
+    flex-shrink: 0;
+    opacity: 0.7;
   }
 
   .tool-badge {

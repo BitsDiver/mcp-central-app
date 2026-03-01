@@ -4,11 +4,15 @@ import type {
   ChatAttachment,
   ChatToolCall,
   ChatSession,
+  ChatMode,
 } from "@/types";
 import { useChatStore } from "@/stores/chat";
 import { useChatSettingsStore } from "@/stores/chatSettings";
 import { useToolStore } from "@/stores/tools";
 import { useChat } from "@/composables/useChat";
+import { usePlanning } from "@/composables/usePlanning";
+import { useAgentOrchestrator } from "@/composables/useAgentOrchestrator";
+import { useAgentPlanningStore } from "@/stores/agentPlanning";
 
 /**
  * useChatGeneration — encapsulates send / retry / generation orchestration.
@@ -26,6 +30,9 @@ export function useChatGeneration(
   const settingsStore = useChatSettingsStore();
   const toolStore = useToolStore();
   const { isGenerating, generate, stop } = useChat();
+  const planning = usePlanning();
+  const orchestrator = useAgentOrchestrator();
+  const planningStore = useAgentPlanningStore();
 
   const generationError = ref<string | null>(null);
   /** Cumulative token usage (prompt + completion) for the latest completed turn */
@@ -60,6 +67,7 @@ export function useChatGeneration(
     assistantId: string,
     precedingMessages: ChatMessage[],
     session: ChatSession | null,
+    maxIterationsOverride?: number,
   ): Promise<void> {
     let activeTcMessage: ChatMessage | null = null;
     /** Tracks the assistant message that should receive streamed tokens.
@@ -71,7 +79,8 @@ export function useChatGeneration(
       ollamaApiKey: settingsStore.settings.ollamaApiKey || undefined,
       model: settingsStore.settings.selectedModel,
       contextSize: settingsStore.settings.contextSize,
-      maxIterations: settingsStore.settings.maxIterations,
+      maxIterations:
+        maxIterationsOverride ?? settingsStore.settings.maxIterations,
       systemPrompt:
         session?.systemPrompt ||
         settingsStore.settings.systemPrompt ||
@@ -170,9 +179,85 @@ export function useChatGeneration(
     });
   }
 
+  // ── Plan mode ──────────────────────────────────────────────
+
+  async function runPlanMode(
+    sessionId: string,
+    userContent: string,
+    precedingMessages: ChatMessage[],
+  ): Promise<void> {
+    // Step 1: add a placeholder plan message
+    const planMsgId = generateId();
+    const planMsg: ChatMessage = {
+      id: planMsgId,
+      role: "plan",
+      content: "Generating plan…",
+      createdAt: new Date().toISOString(),
+      isStreaming: true,
+    };
+    chatStore.addMessage(sessionId, planMsg);
+    scrollToBottom(true);
+
+    // Step 2: generate the plan
+    const { plan, error: planError } = await planning.generatePlan(userContent);
+
+    if (planError || !plan) {
+      chatStore.updateMessage(sessionId, planMsgId, {
+        content: planError ?? "Failed to generate plan.",
+        isStreaming: false,
+        error: planError ?? "Failed to generate plan.",
+      });
+      generationError.value = planError ?? "Failed to generate plan.";
+      return;
+    }
+
+    // Step 3: show the plan in the message with the PlanBlock
+    chatStore.updateMessage(sessionId, planMsgId, {
+      content: "",
+      agentPlan: plan,
+      isStreaming: false,
+    });
+    scrollToBottom(true);
+
+    // Step 4: wait for user approval
+    const approved = await planningStore.waitForApproval(plan);
+    if (!approved) {
+      // Rejected — add a brief note and stop
+      const rejectedId = generateId();
+      chatStore.addMessage(sessionId, {
+        id: rejectedId,
+        role: "assistant",
+        content: "Plan rejected.",
+        createdAt: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Step 5: execute via orchestrator
+    scrollToBottom(true);
+    const result = await orchestrator.execute(plan, precedingMessages);
+
+    // Step 6: add final summary
+    const summaryId = generateId();
+    chatStore.addMessage(sessionId, {
+      id: summaryId,
+      role: "assistant",
+      content: result.summary || result.error || "Agent execution complete.",
+      isStreaming: false,
+      error: result.error ?? undefined,
+      createdAt: new Date().toISOString(),
+    });
+    scrollToBottom(true);
+  }
+
   // ── Public API ─────────────────────────────────────────────
 
-  async function handleSend(content: string, attachments: ChatAttachment[]) {
+  async function handleSend(
+    content: string,
+    attachments: ChatAttachment[],
+    mode?: ChatMode,
+  ) {
+    const effectiveMode = mode ?? settingsStore.settings.chatMode ?? "agent";
     const isConfigured = (() => {
       const p = settingsStore.settings.provider ?? "ollama";
       if (p === "ollama")
@@ -196,6 +281,16 @@ export function useChatGeneration(
     };
     chatStore.addMessage(sessionId, userMsg);
 
+    // ── Plan mode: decompose → approve → execute ─────────────
+    if (effectiveMode === "plan") {
+      const precedingMessages = [
+        ...chatStore.activeSession!.messages.filter((m) => !m.isStreaming),
+      ];
+      await runPlanMode(sessionId, content, precedingMessages);
+      return;
+    }
+
+    // ── Ask / Agent mode: single generate call ────────────────
     const assistantId = generateId();
     chatStore.addMessage(sessionId, {
       id: assistantId,
@@ -212,11 +307,16 @@ export function useChatGeneration(
       ),
     ];
 
+    // "ask" caps tool loops to 1 iteration (single-shot response)
+    const maxIterations =
+      effectiveMode === "ask" ? 1 : settingsStore.settings.maxIterations;
+
     await runGeneration(
       sessionId,
       assistantId,
       allMessages.slice(0, -1),
       chatStore.activeSession,
+      maxIterations,
     );
   }
 

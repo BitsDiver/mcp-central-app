@@ -1,110 +1,13 @@
 import { ref } from "vue";
 import type { ChatMessage, ChatToolCall, Tool } from "@/types";
 import { callMcpTool } from "@/api/mcpClient";
-
-interface OllamaMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string;
-  images?: string[];
-  tool_calls?: OllamaToolCall[];
-  tool_call_id?: string;
-}
-
-interface OllamaToolCall {
-  function: {
-    name: string;
-    arguments: Record<string, unknown>;
-  };
-}
-
-interface OllamaTool {
-  type: "function";
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
-}
-
-interface OllamaStreamChunk {
-  model: string;
-  done: boolean;
-  message?: {
-    role?: string;
-    content?: string;
-    tool_calls?: OllamaToolCall[];
-    thinking?: string;
-  };
-  /** Token usage — present on the final done:true chunk */
-  prompt_eval_count?: number;
-  eval_count?: number;
-}
-
-function parseThinking(content: string): { thinking: string; text: string } {
-  const thinkMatch = content.match(/^<think>([\s\S]*?)<\/think>\s*([\s\S]*)$/s);
-  if (thinkMatch) {
-    return { thinking: thinkMatch[1].trim(), text: thinkMatch[2].trim() };
-  }
-  return { thinking: "", text: content };
-}
-
-function toolsToOllama(tools: Tool[]): OllamaTool[] {
-  return tools.map((t) => ({
-    type: "function",
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: (t.inputSchema as Record<string, unknown>) ?? {
-        type: "object",
-        properties: {},
-      },
-    },
-  }));
-}
-
-function messagesToOllama(
-  messages: ChatMessage[],
-  systemPrompt?: string,
-): OllamaMessage[] {
-  const result: OllamaMessage[] = [];
-  if (systemPrompt) {
-    result.push({ role: "system", content: systemPrompt });
-  }
-  for (const msg of messages) {
-    if (msg.isStreaming) continue;
-    if (msg.role === "user") {
-      const ollMsg: OllamaMessage = { role: "user", content: msg.content };
-      if (msg.attachments?.length) {
-        ollMsg.images = msg.attachments
-          .filter((a) => a.type.startsWith("image/"))
-          .map((a) => a.base64.split(",").pop() ?? a.base64);
-      }
-      result.push(ollMsg);
-    } else if (msg.role === "assistant") {
-      const assistantMsg: OllamaMessage = {
-        role: "assistant",
-        content: msg.content,
-      };
-      // Preserve tool_calls so multi-turn tool context is correct
-      if ((msg as any)._ollamaToolCalls?.length) {
-        assistantMsg.tool_calls = (msg as any)._ollamaToolCalls;
-      }
-      result.push(assistantMsg);
-    } else if (msg.role === "tool" && msg.toolCalls?.length) {
-      for (const tc of msg.toolCalls) {
-        result.push({
-          role: "tool",
-          content:
-            tc.result !== undefined
-              ? JSON.stringify(tc.result)
-              : (tc.error ?? ""),
-          tool_call_id: tc.id,
-        });
-      }
-    }
-  }
-  return result;
-}
+import {
+  type OllamaToolCall,
+  type OllamaStreamChunk,
+  parseThinking,
+  toolsToOllama,
+  messagesToOllama,
+} from "@/utils/ollamaConverters";
 
 export function useOllama() {
   const isGenerating = ref(false);

@@ -1,3 +1,12 @@
+// Re-export multi-agent types for convenience
+export type {
+  ChatMode,
+  AgentTaskStatus,
+  AgentTask,
+  AgentPlanStatus,
+  AgentPlan,
+} from "./agent";
+
 export interface User {
   id: string;
   email: string;
@@ -131,7 +140,7 @@ export interface SocketResponse<T = unknown> {
   message?: string;
 }
 
-export type ChatRole = "user" | "assistant" | "tool";
+export type ChatRole = "user" | "assistant" | "tool" | "plan" | "agent";
 
 export interface ChatAttachment {
   id: string;
@@ -161,6 +170,10 @@ export interface ChatMessage {
   isStreaming?: boolean;
   /** Set when generation ended with an error — kept in history for traceability. */
   error?: string;
+  /** Present when role === 'plan' — the decomposed execution plan waiting for approval. */
+  agentPlan?: import("./agent").AgentPlan;
+  /** Present when role === 'agent' — a single agent task update. */
+  agentTask?: import("./agent").AgentTask;
 }
 
 export interface ChatSession {
@@ -196,6 +209,8 @@ export interface ChatSettings {
   // ── Generic agentic settings ──────────────────────────────────
   /** Maximum consecutive tool-call iterations per message before the loop is stopped. */
   maxIterations: number;
+  /** Active chat mode (Ask = single-shot, Plan = plan-then-approve, Agent = auto-execute). */
+  chatMode: import("./agent").ChatMode;
 }
 
 /** Per-provider persisted configuration. */
