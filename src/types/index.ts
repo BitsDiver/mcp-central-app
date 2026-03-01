@@ -193,6 +193,9 @@ export interface ChatSettings {
   provider: LLMProvider;
   /** Persisted configuration per provider (model, context size, system prompt). */
   perProviderSettings?: Partial<Record<LLMProvider, ProviderConfig>>;
+  // ── Generic agentic settings ──────────────────────────────────
+  /** Maximum consecutive tool-call iterations per message before the loop is stopped. */
+  maxIterations: number;
 }
 
 /** Per-provider persisted configuration. */
@@ -203,7 +206,12 @@ export interface ProviderConfig {
 }
 
 /** LLM backend provider identifier */
-export type LLMProvider = "ollama" | "openai" | "anthropic" | "gemini";
+export type LLMProvider =
+  | "ollama"
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "github";
 
 /** Info about a stored provider key (never contains the actual key) */
 export interface ProviderKeyInfo {

@@ -11,6 +11,8 @@ export interface GenerateOpts {
   ollamaApiKey?: string;
   model?: string;
   contextSize?: number;
+  /** Maximum tool-call iterations before the agentic loop is stopped. */
+  maxIterations?: number;
   systemPrompt?: string;
   messages: ChatMessage[];
   /** Used for Ollama (browser-side MCP). Ignored for backend providers. */
@@ -67,6 +69,8 @@ export function useChat() {
           opts.ollamaApiKey ?? settingsStore.settings.ollamaApiKey ?? undefined,
         model: opts.model ?? settingsStore.settings.selectedModel,
         contextSize: opts.contextSize ?? settingsStore.settings.contextSize,
+        maxIterations:
+          opts.maxIterations ?? settingsStore.settings.maxIterations,
         systemPrompt: opts.systemPrompt,
         messages: opts.messages,
         tools: opts.tools,
@@ -201,6 +205,8 @@ export function useChat() {
         messages: opts.messages,
         systemPrompt: opts.systemPrompt,
         contextSize: opts.contextSize ?? settingsStore.settings.contextSize,
+        maxIterations:
+          opts.maxIterations ?? settingsStore.settings.maxIterations,
       });
     });
   }

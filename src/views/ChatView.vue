@@ -2,83 +2,50 @@
   import { ref, computed, watch, nextTick, onMounted } from 'vue';
   import AppLayout from '@/components/layout/AppLayout.vue';
   import ChatSessionList from '@/components/chat/ChatSessionList.vue';
-  import ChatMessage from '@/components/chat/ChatMessage.vue';
   import ChatInput from '@/components/chat/ChatInput.vue';
-  import AppToggle from '@/components/ui/AppToggle.vue';
+  import ChatTopBar from '@/components/chat/ChatTopBar.vue';
+  import ChatSessionPromptBar from '@/components/chat/ChatSessionPromptBar.vue';
+  import ChatMessagesArea from '@/components/chat/ChatMessagesArea.vue';
+  import ChatErrorBanner from '@/components/chat/ChatErrorBanner.vue';
   import { useChatStore } from '@/stores/chat';
   import { useChatSettingsStore } from '@/stores/chatSettings';
   import { useToolStore } from '@/stores/tools';
   import { useTenantStore } from '@/stores/tenant';
-  import { useChat } from '@/composables/useChat';
-  import { getChatKey, clearChatKey, storeChatKey } from '@/composables/useChatMcpKey';
-  import { initMcpSession, resetMcpSession } from '@/api/mcpClient';
-  import type { ChatMessage as ChatMessageType, ChatAttachment, ChatToolCall } from '@/types';
+  import { useChatGeneration } from '@/composables/useChatGeneration';
+  import { useChatMcpSession } from '@/composables/useChatMcpSession';
+  import { useSidebarResize } from '@/composables/useSidebarResize';
 
+  // ── Stores ─────────────────────────────────────────────────
   const chatStore = useChatStore();
   const settingsStore = useChatSettingsStore();
   const toolStore = useToolStore();
   const tenantStore = useTenantStore();
-  const { isGenerating, generate, stop } = useChat();
 
-  const messagesContainer = ref<HTMLElement | null>(null);
-  const sidebarOpen = ref(true);
-  const sidebarWidth = ref(
-    parseInt(localStorage.getItem('chat-sidebar-width') ?? '240', 10),
-  );
-  const isResizing = ref(false);
+  // ── UI state ───────────────────────────────────────────────
   const linkToTenant = ref(false);
-  const generationError = ref<string | null>(null);
   const showSessionPrompt = ref(false);
-  /** Cumulative token usage (prompt + completion) for the latest completed turn */
-  const usedTokens = ref(0);
 
-  const contextUsage = computed(() =>
-    settingsStore.settings.contextSize > 0
-      ? usedTokens.value / settingsStore.settings.contextSize
-      : 0,
-  );
+  // ── Composables ────────────────────────────────────────────
+  const { sidebarOpen, sidebarWidth, startSidebarResize } = useSidebarResize();
+  const { chatKeyReady } = useChatMcpSession();
 
-  /** True once a valid MCP session has been initialised for the active tenant */
-  const chatKeyReady = ref(false);
-  const isEnablingTools = ref(false);
+  const messagesArea = ref<InstanceType<typeof ChatMessagesArea> | null>(null);
 
-  // Re-init MCP session whenever the active tenant changes
-  watch(
-    () => tenantStore.selectedTenant?.id,
-    async (tenantId) => {
-      resetMcpSession();
-      chatKeyReady.value = false;
-      if (!tenantId) return;
-      const stored = getChatKey(tenantId);
-      if (!stored) return;
-      try {
-        await initMcpSession(stored.key);
-        chatKeyReady.value = true;
-      } catch {
-        // Key was revoked server-side — clear stale entry and show safeguard
-        clearChatKey(tenantId);
-      }
-    },
-    { immediate: true },
-  );
-
-  async function enableChatTools() {
-    const tenant = tenantStore.selectedTenant;
-    if (!tenant) return;
-    isEnablingTools.value = true;
-    generationError.value = null;
-    try {
-      const newKey = await tenantStore.createKey(`${tenant.name} — AI Chat`);
-      storeChatKey(tenant.id, newKey.id, newKey.key);
-      await initMcpSession(newKey.key);
-      chatKeyReady.value = true;
-    } catch (err) {
-      generationError.value = err instanceof Error ? err.message : String(err);
-    } finally {
-      isEnablingTools.value = false;
-    }
+  function scrollToBottom(smooth = false) {
+    messagesArea.value?.scrollToBottom(smooth);
   }
 
+  const {
+    isGenerating,
+    stop,
+    generationError,
+    usedTokens,
+    contextUsage,
+    handleSend,
+    handleRetry,
+  } = useChatGeneration(chatKeyReady, linkToTenant, scrollToBottom);
+
+  // ── Derived data ───────────────────────────────────────────
   const session = computed(() => chatStore.activeSession);
   const messages = computed(() => session.value?.messages ?? []);
 
@@ -88,18 +55,8 @@
     return !!settingsStore.settings.selectedModel;
   });
 
-  function scrollToBottom(smooth = false) {
-    nextTick(() => {
-      const el = messagesContainer.value;
-      if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
-    });
-  }
-
-  watch(
-    () => messages.value.length,
-    () => scrollToBottom(true),
-  );
-
+  // ── Scroll management ─────────────────────────────────────
+  watch(() => messages.value.length, () => scrollToBottom(true));
   watch(
     () => chatStore.activeSessionId,
     () => {
@@ -107,136 +64,9 @@
       nextTick(() => scrollToBottom(false));
     },
   );
+  onMounted(() => scrollToBottom(false));
 
-  onMounted(() => {
-    scrollToBottom(false);
-  });
-
-  function generateId(): string {
-    return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  }
-
-  function ensureActiveSession(): string {
-    if (!chatStore.activeSessionId) {
-      const tenantId = linkToTenant.value ? tenantStore.selectedTenant?.id ?? null : null;
-      chatStore.createSession(tenantId);
-    }
-    return chatStore.activeSessionId!;
-  }
-
-  async function handleSend(content: string, attachments: ChatAttachment[]) {
-    if (!isConfigured.value) return;
-    generationError.value = null;
-
-    const sessionId = ensureActiveSession();
-
-    const userMsg: ChatMessageType = {
-      id: generateId(),
-      role: 'user',
-      content,
-      attachments: attachments.length > 0 ? attachments : undefined,
-      createdAt: new Date().toISOString(),
-    };
-    chatStore.addMessage(sessionId, userMsg);
-
-    const assistantId = generateId();
-    const assistantMsg: ChatMessageType = {
-      id: assistantId,
-      role: 'assistant',
-      content: '',
-      isStreaming: true,
-      createdAt: new Date().toISOString(),
-    };
-    chatStore.addMessage(sessionId, assistantMsg);
-    scrollToBottom(true);
-
-    const allMessages = [...chatStore.activeSession!.messages.filter((m) => !m.isStreaming || m.id === assistantId)];
-
-    let activeTcMessage: ChatMessageType | null = null;
-
-    await generate({
-      ollamaUrl: settingsStore.settings.ollamaUrl,
-      ollamaApiKey: settingsStore.settings.ollamaApiKey || undefined,
-      model: settingsStore.settings.selectedModel,
-      contextSize: settingsStore.settings.contextSize,
-      // Session-level prompt overrides global setting
-      systemPrompt:
-        (session.value?.systemPrompt || settingsStore.settings.systemPrompt) || undefined,
-      messages: allMessages.slice(0, -1),
-      tools: chatKeyReady.value ? toolStore.tools : [],
-
-      onToken(text, thinking) {
-        chatStore.updateMessage(sessionId, assistantId, {
-          content: text,
-          thinking: thinking || undefined,
-          isStreaming: true,
-        });
-        scrollToBottom(false);
-      },
-
-      async onToolCall(toolCall: ChatToolCall) {
-        if (!activeTcMessage) {
-          activeTcMessage = {
-            id: generateId(),
-            role: 'tool',
-            content: '',
-            toolCalls: [],
-            createdAt: new Date().toISOString(),
-          };
-          chatStore.addMessage(sessionId, activeTcMessage);
-        }
-
-        const existing = activeTcMessage.toolCalls?.find((tc) => tc.id === toolCall.id);
-        if (existing) {
-          Object.assign(existing, toolCall);
-          chatStore.persist();
-        } else {
-          activeTcMessage.toolCalls = [...(activeTcMessage.toolCalls ?? []), toolCall];
-          chatStore.updateMessage(sessionId, activeTcMessage.id, {
-            toolCalls: activeTcMessage.toolCalls,
-          });
-        }
-
-        if (toolCall.status === 'success' || toolCall.status === 'error') {
-          activeTcMessage = null;
-          const nextAssistId = generateId();
-          const nextAssist: ChatMessageType = {
-            id: nextAssistId,
-            role: 'assistant',
-            content: '',
-            isStreaming: true,
-            createdAt: new Date().toISOString(),
-          };
-          chatStore.addMessage(sessionId, nextAssist);
-          scrollToBottom(true);
-        }
-      },
-
-      onDone(finalContent, finalThinking) {
-        const lastAssistant = [...chatStore.activeSession!.messages]
-          .reverse()
-          .find((m) => m.role === 'assistant' && m.isStreaming);
-        if (lastAssistant) {
-          chatStore.updateMessage(sessionId, lastAssistant.id, {
-            content: finalContent,
-            thinking: finalThinking || undefined,
-            isStreaming: false,
-          });
-        }
-        scrollToBottom(true);
-      },
-
-      onError(err) {
-        // Inject the error directly into the message stream — no redundant banner needed
-        chatStore.updateMessage(sessionId, assistantId, { isStreaming: false, error: err });
-      },
-
-      onUsage(used) {
-        usedTokens.value = used;
-      },
-    });
-  }
-
+  // ── Session actions ────────────────────────────────────────
   function newChat() {
     const tenantId = linkToTenant.value ? tenantStore.selectedTenant?.id ?? null : null;
     chatStore.createSession(tenantId);
@@ -251,122 +81,23 @@
     chatStore.deleteSession(id);
   }
 
-  /**
-   * Retry from a specific user message: discard everything after it and re-generate.
-   */
-  async function handleRetry(userMsgId: string) {
-    if (!session.value) return;
-    const sessionId = session.value.id;
-    const msgs = session.value.messages;
-    const userMsg = msgs.find((m) => m.id === userMsgId);
-    if (!userMsg || userMsg.role !== 'user') return;
-
-    // Clear the error banner and remove all messages after the user one
-    generationError.value = null;
-    chatStore.removeMessagesAfter(sessionId, userMsgId);
-
-    // Create a fresh assistant placeholder and generate
-    const assistantId = generateId();
-    chatStore.addMessage(sessionId, {
-      id: assistantId,
-      role: 'assistant',
-      content: '',
-      isStreaming: true,
-      createdAt: new Date().toISOString(),
-    });
-    scrollToBottom(true);
-
-    const allMessages = [
-      ...chatStore.activeSession!.messages.filter((m) => !m.isStreaming || m.id === assistantId),
-    ];
-
-    let activeTcMessage: typeof msgs[number] | null = null;
-
-    await generate({
-      ollamaUrl: settingsStore.settings.ollamaUrl,
-      ollamaApiKey: settingsStore.settings.ollamaApiKey || undefined,
-      model: settingsStore.settings.selectedModel,
-      contextSize: settingsStore.settings.contextSize,
-      systemPrompt: (session.value?.systemPrompt || settingsStore.settings.systemPrompt) || undefined,
-      messages: allMessages.slice(0, -1),
-      tools: chatKeyReady.value ? toolStore.tools : [],
-      onToken(text, thinking) {
-        chatStore.updateMessage(sessionId, assistantId, { content: text, thinking: thinking || undefined, isStreaming: true });
-        scrollToBottom(false);
-      },
-      async onToolCall(toolCall) {
-        if (!activeTcMessage) {
-          activeTcMessage = { id: generateId(), role: 'tool', content: '', toolCalls: [], createdAt: new Date().toISOString() };
-          chatStore.addMessage(sessionId, activeTcMessage);
-        }
-        const existing = activeTcMessage.toolCalls?.find((tc) => tc.id === toolCall.id);
-        if (existing) { Object.assign(existing, toolCall); chatStore.persist(); }
-        else { activeTcMessage.toolCalls = [...(activeTcMessage.toolCalls ?? []), toolCall]; chatStore.updateMessage(sessionId, activeTcMessage.id, { toolCalls: activeTcMessage.toolCalls }); }
-        if (toolCall.status === 'success' || toolCall.status === 'error') {
-          activeTcMessage = null;
-          const nextAssistId = generateId();
-          chatStore.addMessage(sessionId, { id: nextAssistId, role: 'assistant', content: '', isStreaming: true, createdAt: new Date().toISOString() });
-          scrollToBottom(true);
-        }
-      },
-      onDone(finalContent, finalThinking) {
-        const last = [...chatStore.activeSession!.messages].reverse().find((m) => m.role === 'assistant' && m.isStreaming);
-        if (last) chatStore.updateMessage(sessionId, last.id, { content: finalContent, thinking: finalThinking || undefined, isStreaming: false });
-        scrollToBottom(true);
-      },
-      onError(err) {
-        chatStore.updateMessage(sessionId, assistantId, { isStreaming: false, error: err });
-        generationError.value = err;
-      },
-      onUsage(used) { usedTokens.value = used; },
-    });
-  }
-
-  /** Drag-to-resize chat sidebar */
-  function startSidebarResize(e: MouseEvent) {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startWidth = sidebarWidth.value;
-    isResizing.value = true;
-
-    function onMove(ev: MouseEvent) {
-      sidebarWidth.value = Math.max(160, Math.min(420, startWidth + ev.clientX - startX));
-      localStorage.setItem('chat-sidebar-width', String(sidebarWidth.value));
-    }
-    function onUp() {
-      isResizing.value = false;
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }
-
+  // ── Computed helpers ───────────────────────────────────────
   const filteredSessions = computed(() => {
-    if (!linkToTenant.value || !tenantStore.selectedTenant) {
-      return chatStore.sortedSessions;
-    }
+    if (!linkToTenant.value || !tenantStore.selectedTenant) return chatStore.sortedSessions;
     return chatStore.sortedSessions.filter(
       (s) => !s.tenantId || s.tenantId === tenantStore.selectedTenant!.id,
     );
   });
 
-  /** For each message index, determine whether it can be retried. */
   const retryableIds = computed<Set<string>>(() => {
     const set = new Set<string>();
     const msgs = messages.value;
     for (let i = 0; i < msgs.length - 1; i++) {
-      const next = msgs[i + 1];
-      if (msgs[i].role === 'user' && next?.error) {
-        set.add(msgs[i].id);
-      }
+      if (msgs[i].role === 'user' && msgs[i + 1]?.error) set.add(msgs[i].id);
     }
-    // Also allow retry on the last user message if the last message has an error or if generationError is set
     const last = msgs[msgs.length - 1];
-    const secondToLast = msgs[msgs.length - 2];
-    if (secondToLast?.role === 'user' && last?.error) {
-      set.add(secondToLast.id);
-    }
+    const prev = msgs[msgs.length - 2];
+    if (prev?.role === 'user' && last?.error) set.add(prev.id);
     return set;
   });
 </script>
@@ -374,83 +105,24 @@
 <template>
   <AppLayout>
     <div class="chat-layout">
+      <!-- ── Sidebar ────────────────────────────────────── -->
       <div :class="['chat-sidebar', { 'sidebar-hidden': !sidebarOpen }]"
         :style="sidebarOpen ? `width: ${sidebarWidth}px` : ''">
         <ChatSessionList :sessions="filteredSessions" :active-id="chatStore.activeSessionId"
           :active-tenant-id="tenantStore.selectedTenant?.id" @select="handleSelectSession" @delete="handleDeleteSession"
           @new="newChat" />
-        <!-- Drag-to-resize handle -->
         <div v-if="sidebarOpen" class="resize-handle" @mousedown="startSidebarResize" />
       </div>
 
+      <!-- ── Main area ──────────────────────────────────── -->
       <div class="chat-main">
-        <div class="chat-topbar">
-          <button type="button" class="sidebar-toggle" @click="sidebarOpen = !sidebarOpen"
-            :title="sidebarOpen ? 'Hide sessions' : 'Show sessions'">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 12h18M3 6h18M3 18h18" stroke-linecap="round" />
-            </svg>
-          </button>
+        <ChatTopBar :session="session" :sidebar-open="sidebarOpen" :show-session-prompt="showSessionPrompt"
+          :link-to-tenant="linkToTenant" @update:sidebar-open="sidebarOpen = $event"
+          @update:show-session-prompt="showSessionPrompt = $event" @update:link-to-tenant="linkToTenant = $event" />
 
-          <div class="topbar-center">
-            <span v-if="session" class="session-title-display">{{ session.title }}</span>
-            <span v-else class="session-title-display muted">New conversation</span>
-          </div>
+        <ChatSessionPromptBar :session="session" :visible="showSessionPrompt" />
 
-          <div class="topbar-right">
-            <!-- Session prompt override toggle -->
-            <button type="button" class="sidebar-toggle"
-              :class="{ 'prompt-btn-active': showSessionPrompt || !!session?.systemPrompt }"
-              :title="showSessionPrompt ? 'Hide session prompt' : 'Override system prompt for this session'"
-              @click="showSessionPrompt = !showSessionPrompt">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 20h9" stroke-linecap="round" />
-                <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" stroke-linecap="round"
-                  stroke-linejoin="round" />
-              </svg>
-            </button>
-
-            <div class="tenant-link-toggle">
-              <span class="toggle-label">Link to tenant</span>
-              <AppToggle :model-value="linkToTenant" @update:model-value="linkToTenant = $event" />
-            </div>
-          </div>
-        </div>
-
-        <!-- Per-session system prompt override -->
-        <div v-if="showSessionPrompt" class="session-prompt-bar">
-          <label class="session-prompt-label">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <path d="M8 10h8M8 14h5" stroke-linecap="round" />
-            </svg>
-            Session prompt
-            <span v-if="session?.systemPrompt" class="session-prompt-badge">overriding global</span>
-          </label>
-          <textarea :value="session?.systemPrompt ?? ''"
-            @input="session && chatStore.setSessionPrompt(session.id, ($event.target as HTMLTextAreaElement).value)"
-            placeholder="Override the global system prompt for this session only…" rows="2"
-            class="session-prompt-textarea" />
-        </div>
-        <div v-if="!chatKeyReady && toolStore.tools.length > 0" class="tools-safeguard">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            class="shrink-0">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0110 0v4" stroke-linecap="round" />
-          </svg>
-          <span>
-            <strong>{{ toolStore.tools.length }} tool{{ toolStore.tools.length !== 1 ? 's' : '' }} available</strong>
-            — enable AI tools to let the model use them in this session.
-          </span>
-          <button type="button" class="safeguard-btn" :disabled="isEnablingTools" @click="enableChatTools">
-            <svg v-if="isEnablingTools" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2.5" class="animate-spin">
-              <path d="M21 12a9 9 0 11-6.22-8.56" stroke-linecap="round" />
-            </svg>
-            {{ isEnablingTools ? 'Connecting…' : 'Enable AI tools' }}
-          </button>
-        </div>
-
+        <!-- Config warning (inline — too small to warrant its own file) -->
         <div v-if="!isConfigured" class="config-warning">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path
@@ -468,62 +140,17 @@
           </template>
         </div>
 
-        <div ref="messagesContainer" class="messages-area">
-          <div v-if="messages.length === 0" class="empty-chat">
-            <div class="empty-icon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path
-                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                  stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-            </div>
-            <p class="empty-title">Start a conversation</p>
-            <p class="empty-sub">
-              <template v-if="toolStore.tools.length > 0">
-                {{ toolStore.tools.length }} tool{{ toolStore.tools.length !== 1 ? 's' : '' }} available
-              </template>
-              <template v-else>
-                No tools loaded
-              </template>
-              <span v-if="settingsStore.settings.selectedModel"> · {{ settingsStore.settings.selectedModel }}</span>
-            </p>
-          </div>
+        <ChatMessagesArea ref="messagesArea" :messages="messages" :retryable-ids="retryableIds"
+          :tool-count="toolStore.tools.length" :selected-model="settingsStore.settings.selectedModel"
+          @retry="handleRetry" />
 
-          <div v-else class="messages-list">
-            <ChatMessage v-for="msg in messages" :key="msg.id" :message="msg" :can-retry="retryableIds.has(msg.id)"
-              @retry="handleRetry" />
-          </div>
-        </div>
-
-        <!-- generationError banner kept only for tool-init errors (not LLM stream errors which are inline) -->
-        <div v-if="generationError" class="error-banner">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 8v4M12 16h.01" stroke-linecap="round" />
-          </svg>
-          <span>{{ generationError }}</span>
-          <button type="button" class="error-dismiss" @click="generationError = null">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" />
-            </svg>
-          </button>
-        </div>
+        <ChatErrorBanner v-if="generationError" :error="generationError" @dismiss="generationError = null" />
 
         <div class="input-area">
           <ChatInput :disabled="!isConfigured" :is-generating="isGenerating"
             :context-usage="usedTokens > 0 ? contextUsage : undefined"
             :context-tokens="usedTokens > 0 ? usedTokens : undefined" :context-size="settingsStore.settings.contextSize"
-            @send="handleSend" @stop="stop" />
-          <p class="input-hint">
-            <span v-if="settingsStore.settings.selectedModel">{{ settingsStore.settings.selectedModel }}</span>
-            <span v-else style="color: var(--color-warning-600)">No model selected</span>
-            <span class="hint-sep">·</span>
-            ctx {{ settingsStore.settings.contextSize.toLocaleString() }}
-            <span v-if="toolStore.tools.length > 0">
-              <span class="hint-sep">·</span>
-              {{ toolStore.tools.length }} tool{{ toolStore.tools.length !== 1 ? 's' : '' }}
-            </span>
-          </p>
+            :tool-count="toolStore.tools.length" @send="handleSend" @stop="stop" />
         </div>
       </div>
     </div>
@@ -561,74 +188,6 @@
     min-width: 0;
   }
 
-  .chat-topbar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--border-default);
-    flex-shrink: 0;
-    background: var(--bg-surface);
-  }
-
-  .sidebar-toggle {
-    width: 30px;
-    height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-md);
-    border: none;
-    background: none;
-    cursor: pointer;
-    color: var(--text-tertiary);
-    flex-shrink: 0;
-    transition: all 0.12s ease;
-  }
-
-  .sidebar-toggle:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
-  }
-
-  .topbar-center {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .session-title-display {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: block;
-  }
-
-  .session-title-display.muted {
-    color: var(--text-tertiary);
-    font-weight: 400;
-  }
-
-  .topbar-right {
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-  }
-
-  .tenant-link-toggle {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .toggle-label {
-    font-size: 12px;
-    color: var(--text-secondary);
-    white-space: nowrap;
-  }
-
   .config-warning {
     display: flex;
     align-items: center;
@@ -647,105 +206,10 @@
     border-color: rgba(245, 158, 11, 0.15);
   }
 
-  .tools-safeguard {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-    background: color-mix(in srgb, #6366f1 6%, var(--bg-surface));
-    color: var(--text-secondary);
-    font-size: 13px;
-    flex-shrink: 0;
-    border-bottom: 1px solid color-mix(in srgb, #6366f1 20%, transparent);
-  }
-
-  [data-theme="dark"] .tools-safeguard {
-    background: rgba(99, 102, 241, 0.08);
-    border-color: rgba(99, 102, 241, 0.2);
-  }
-
-  .safeguard-btn {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 12px;
-    border-radius: var(--radius-md);
-    border: 1px solid color-mix(in srgb, #6366f1 40%, transparent);
-    background: color-mix(in srgb, #6366f1 10%, transparent);
-    color: #6366f1;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.12s ease;
-    flex-shrink: 0;
-  }
-
-  .safeguard-btn:hover:not(:disabled) {
-    background: color-mix(in srgb, #6366f1 18%, transparent);
-  }
-
-  .safeguard-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
   .warning-link {
     font-weight: 600;
     text-decoration: underline;
     color: inherit;
-  }
-
-  .messages-area {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px 16px;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .empty-chat {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 40px;
-  }
-
-  .empty-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: var(--radius-full);
-    background: var(--bg-muted);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-tertiary);
-  }
-
-  .empty-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .empty-sub {
-    font-size: 13px;
-    color: var(--text-tertiary);
-    margin: 0;
-  }
-
-  .messages-list {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    max-width: 860px;
-    width: 100%;
-    margin: 0 auto;
   }
 
   /* ── Resize handle ──────────────────────────────────────────── */
@@ -777,37 +241,6 @@
     opacity: 1;
   }
 
-  .error-banner {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    background: var(--color-danger-50);
-    color: var(--color-danger-700);
-    font-size: 13px;
-    flex-shrink: 0;
-  }
-
-  [data-theme="dark"] .error-banner {
-    background: rgba(239, 68, 68, 0.08);
-    color: var(--color-danger-500);
-  }
-
-  .error-dismiss {
-    margin-left: auto;
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    background: none;
-    cursor: pointer;
-    color: inherit;
-    border-radius: var(--radius-sm);
-    flex-shrink: 0;
-  }
-
   .input-area {
     padding: 12px 16px 16px;
     flex-shrink: 0;
@@ -815,81 +248,5 @@
     width: 100%;
     margin: 0 auto;
     align-self: center;
-  }
-
-  .input-hint {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    color: var(--text-tertiary);
-    margin: 6px 0 0;
-    padding: 0 4px;
-  }
-
-  .hint-sep {
-    opacity: 0.4;
-  }
-
-  /* ── Session prompt bar ─────────────────────────────────── */
-  .prompt-btn-active {
-    color: var(--color-primary-500) !important;
-    background: color-mix(in srgb, var(--color-primary-500) 10%, transparent) !important;
-  }
-
-  .session-prompt-bar {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 8px 16px 10px;
-    border-bottom: 1px solid var(--border-default);
-    background: color-mix(in srgb, var(--color-primary-500) 3%, var(--bg-surface));
-    flex-shrink: 0;
-  }
-
-  .session-prompt-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .session-prompt-badge {
-    font-size: 10px;
-    font-weight: 500;
-    text-transform: none;
-    letter-spacing: 0;
-    padding: 1px 6px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--color-primary-500) 15%, transparent);
-    color: var(--color-primary-500);
-  }
-
-  .session-prompt-textarea {
-    width: 100%;
-    padding: 6px 10px;
-    font-size: 13px;
-    font-family: var(--font-sans);
-    line-height: 1.5;
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-md);
-    background: var(--bg-input);
-    color: var(--text-primary);
-    resize: vertical;
-    outline: none;
-    transition: border-color 0.15s ease;
-  }
-
-  .session-prompt-textarea::placeholder {
-    color: var(--text-tertiary);
-  }
-
-  .session-prompt-textarea:focus {
-    border-color: var(--border-focus);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
 </style>

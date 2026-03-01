@@ -9,6 +9,27 @@ import type {
 
 const STORAGE_KEY = "mcp-chat-settings";
 
+/** Default maximum number of consecutive tool-call iterations per message. */
+export const DEFAULT_MAX_ITERATIONS = 15;
+
+/**
+ * Default system prompt for agentic chat sessions.
+ * Instructs the model to use tools autonomously and iterate until the task is complete.
+ */
+export const DEFAULT_SYSTEM_PROMPT =
+  `You are a highly capable AI assistant with access to MCP (Model Context Protocol) tools. ` +
+  `When a user asks you to perform a task:\n` +
+  `1. Analyse the request thoroughly before acting.\n` +
+  `2. Use the available tools as many times as needed to complete the task fully and autonomously — ` +
+  `do not ask for confirmation between steps unless the action is explicitly irreversible ` +
+  `(e.g. permanently deleting data, sending messages on behalf of the user).\n` +
+  `3. After each tool result, evaluate whether the task is complete and continue calling tools if not.\n` +
+  `4. If a tool returns an error, attempt to recover autonomously (retry with corrected arguments, ` +
+  `use an alternative tool, or adapt your approach) before surfacing the problem to the user.\n` +
+  `5. Once the task is fully complete, produce a clear, well-structured response summarising ` +
+  `what was done and the outcome.\n` +
+  `Always prefer taking action over asking for clarification when the user's intent is unambiguous.`;
+
 function loadFromStorage(): ChatSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -19,9 +40,10 @@ function loadFromStorage(): ChatSettings {
         ollamaApiKey: parsed.ollamaApiKey ?? "",
         selectedModel: parsed.selectedModel ?? "",
         contextSize: parsed.contextSize ?? 8192,
-        systemPrompt: parsed.systemPrompt ?? "",
+        systemPrompt: parsed.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
         provider: parsed.provider ?? "ollama",
         perProviderSettings: parsed.perProviderSettings ?? {},
+        maxIterations: parsed.maxIterations ?? DEFAULT_MAX_ITERATIONS,
       };
     }
   } catch {}
@@ -30,9 +52,10 @@ function loadFromStorage(): ChatSettings {
     ollamaApiKey: "",
     selectedModel: "",
     contextSize: 8192,
-    systemPrompt: "",
+    systemPrompt: DEFAULT_SYSTEM_PROMPT,
     provider: "ollama",
     perProviderSettings: {},
+    maxIterations: DEFAULT_MAX_ITERATIONS,
   };
 }
 
@@ -68,6 +91,22 @@ export const PROVIDER_DEFAULT_MODELS: Record<LLMProvider, string[]> = {
     "gemini-1.5-pro",
     "gemini-1.5-flash",
   ],
+  // ── GitHub Models ── https://github.com/marketplace/models
+  // Uses Azure AI Inference endpoint — same OpenAI-compatible API
+  github: [
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+    "gpt-4o",
+    "gpt-4o-mini",
+    "o3-mini",
+    "o4-mini",
+    "Phi-4",
+    "Phi-4-mini",
+    "DeepSeek-R1",
+    "Mistral-Large-2",
+    "Meta-Llama-3.1-405B-Instruct",
+  ],
 };
 
 /** Max context window (tokens) per known model — drives the UI slider max value. */
@@ -93,6 +132,13 @@ export const MODEL_CONTEXT_LIMITS: Record<string, number> = {
   "gemini-2.0-flash": 1_048_576,
   "gemini-1.5-pro": 2_097_152,
   "gemini-1.5-flash": 1_048_576,
+  // GitHub Models (Azure AI Inference)
+  "o3-mini": 200_000,
+  "Phi-4": 16_384,
+  "Phi-4-mini": 128_000,
+  "DeepSeek-R1": 128_000,
+  "Mistral-Large-2": 128_000,
+  "Meta-Llama-3.1-405B-Instruct": 128_000,
 };
 
 /** Fallback max for Ollama / custom models when the model isn't in MODEL_CONTEXT_LIMITS (128 k). */
@@ -113,12 +159,13 @@ export const useChatSettingsStore = defineStore("chatSettings", () => {
   );
 
   /** Fetch models from local Ollama (only relevant when provider === "ollama") */
-  async function fetchModels(): Promise<void> {
-    if (!settings.value.ollamaUrl) return;
+  async function fetchModels(url?: string): Promise<void> {
+    const ollamaUrl = url || settings.value.ollamaUrl;
+    if (!ollamaUrl) return;
     isLoadingModels.value = true;
     modelLoadError.value = null;
     try {
-      const res = await fetch(`${settings.value.ollamaUrl}/api/tags`, {
+      const res = await fetch(`${ollamaUrl}/api/tags`, {
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -157,8 +204,9 @@ export const useChatSettingsStore = defineStore("chatSettings", () => {
       provider: nextProvider,
       selectedModel: restored?.selectedModel ?? "",
       contextSize: restored?.contextSize ?? 8192,
-      systemPrompt: restored?.systemPrompt ?? "",
+      systemPrompt: restored?.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
       perProviderSettings,
+      // maxIterations is global — not per-provider, preserve as-is
     };
   }
 
@@ -171,6 +219,7 @@ export const useChatSettingsStore = defineStore("chatSettings", () => {
       systemPrompt: string;
       ollamaUrl?: string;
       ollamaApiKey?: string;
+      maxIterations?: number;
     },
   ): void {
     const perProviderSettings: Partial<Record<LLMProvider, ProviderConfig>> = {
@@ -191,6 +240,9 @@ export const useChatSettingsStore = defineStore("chatSettings", () => {
         : {}),
       ...(config.ollamaApiKey !== undefined
         ? { ollamaApiKey: config.ollamaApiKey }
+        : {}),
+      ...(config.maxIterations !== undefined
+        ? { maxIterations: config.maxIterations }
         : {}),
       perProviderSettings,
     };

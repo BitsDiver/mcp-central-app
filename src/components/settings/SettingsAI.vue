@@ -1,6 +1,6 @@
 <script setup lang="ts">
     import { ref, computed, onMounted, watch } from 'vue';
-    import { useChatSettingsStore, PROVIDER_DEFAULT_MODELS, MODEL_CONTEXT_LIMITS, DEFAULT_MAX_CONTEXT } from '@/stores/chatSettings';
+    import { useChatSettingsStore, PROVIDER_DEFAULT_MODELS, MODEL_CONTEXT_LIMITS, DEFAULT_MAX_CONTEXT, DEFAULT_MAX_ITERATIONS, DEFAULT_SYSTEM_PROMPT } from '@/stores/chatSettings';
     import { useAiKeysStore } from '@/stores/aiKeys';
     import type { LLMProvider } from '@/types';
 
@@ -13,6 +13,7 @@
     const draftModel = ref(chatSettings.settings.selectedModel);
     const draftContextSize = ref(chatSettings.settings.contextSize);
     const draftSystemPrompt = ref(chatSettings.settings.systemPrompt);
+    const draftMaxIterations = ref(chatSettings.settings.maxIterations ?? DEFAULT_MAX_ITERATIONS);
     const draftOllamaUrl = ref(chatSettings.settings.ollamaUrl);
     const draftOllamaApiKey = ref(chatSettings.settings.ollamaApiKey ?? '');
 
@@ -20,6 +21,7 @@
         draftModel.value !== chatSettings.settings.selectedModel ||
         draftContextSize.value !== chatSettings.settings.contextSize ||
         draftSystemPrompt.value !== chatSettings.settings.systemPrompt ||
+        draftMaxIterations.value !== (chatSettings.settings.maxIterations ?? DEFAULT_MAX_ITERATIONS) ||
         draftOllamaUrl.value !== chatSettings.settings.ollamaUrl ||
         draftOllamaApiKey.value !== (chatSettings.settings.ollamaApiKey ?? ''),
     );
@@ -53,13 +55,14 @@
         draftModel.value = chatSettings.settings.selectedModel;
         draftContextSize.value = chatSettings.settings.contextSize;
         draftSystemPrompt.value = chatSettings.settings.systemPrompt;
+        draftMaxIterations.value = chatSettings.settings.maxIterations ?? DEFAULT_MAX_ITERATIONS;
         if (p !== 'ollama') {
             const models = PROVIDER_DEFAULT_MODELS[p] ?? [];
             customModelMode.value = draftModel.value !== '' && !models.includes(draftModel.value);
             aiKeys.loadProviders();
         } else {
             customModelMode.value = false;
-            chatSettings.fetchModels();
+            chatSettings.fetchModels(draftOllamaUrl.value);
         }
     });
 
@@ -71,7 +74,7 @@
 
     onMounted(() => {
         if (provider.value === 'ollama') {
-            chatSettings.fetchModels();
+            chatSettings.fetchModels(draftOllamaUrl.value);
         } else {
             aiKeys.loadProviders();
         }
@@ -82,6 +85,7 @@
         { id: 'openai', label: 'OpenAI' },
         { id: 'anthropic', label: 'Anthropic' },
         { id: 'gemini', label: 'Gemini' },
+        { id: 'github', label: 'GitHub' },
     ];
 
     const currentKeyInfo = computed(() =>
@@ -114,11 +118,16 @@
             selectedModel: draftModel.value,
             contextSize: draftContextSize.value,
             systemPrompt: draftSystemPrompt.value,
+            maxIterations: draftMaxIterations.value,
             ollamaUrl: draftOllamaUrl.value,
             ollamaApiKey: draftOllamaApiKey.value,
         });
         configSaved.value = true;
         setTimeout(() => { configSaved.value = false; }, 2000);
+    }
+
+    function useDefaultSystemPrompt() {
+        draftSystemPrompt.value = DEFAULT_SYSTEM_PROMPT;
     }
 
     function formatModelSize(bytes: number): string {
@@ -192,7 +201,7 @@
                             placeholder="http://localhost:11434"
                             class="w-full pl-3 pr-10 py-2 text-sm rounded-lg border transition-colors duration-150 outline-none bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] border-[var(--border-default)] focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-500/20" />
                         <button type="button" :disabled="chatSettings.isLoadingModels"
-                            @click="chatSettings.fetchModels()" title="Detect models"
+                            @click="chatSettings.fetchModels(draftOllamaUrl)" title="Detect models"
                             class="absolute right-2 flex items-center justify-center w-6 h-6 rounded transition-colors duration-150 disabled:opacity-40"
                             style="color: var(--text-secondary);" onmouseenter="this.style.color='var(--text-primary)'"
                             onmouseleave="this.style.color='var(--text-secondary)'">
@@ -302,7 +311,7 @@
                     <!-- Key input (new or replace) -->
                     <div class="flex gap-2">
                         <input v-model="newApiKey" type="password"
-                            :placeholder="currentKeyInfo ? 'Paste new key to replace…' : (provider === 'openai' ? 'sk-…' : provider === 'anthropic' ? 'sk-ant-…' : 'AIza…')"
+                            :placeholder="currentKeyInfo ? 'Paste new key to replace…' : (provider === 'openai' ? 'sk-…' : provider === 'anthropic' ? 'sk-ant-…' : provider === 'github' ? 'ghp_…' : 'AIza…')"
                             autocomplete="new-password"
                             class="flex-1 px-3 py-2 text-sm rounded-lg border transition-colors duration-150 outline-none bg-[var(--bg-input)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] border-[var(--border-default)] focus:border-[var(--border-focus)] focus:ring-2 focus:ring-blue-500/20"
                             @keydown.enter="handleSaveKey" />
@@ -377,17 +386,49 @@
                 </p>
             </div>
 
+            <!-- ══ Divider: provider-specific → generic settings ═══════════════════ -->
+            <div class="flex items-center gap-3 my-1">
+                <div class="flex-1 border-t" style="border-color: var(--border-default);"></div>
+                <span class="text-xs font-medium uppercase tracking-wide" style="color: var(--text-tertiary);">General
+                    settings</span>
+                <div class="flex-1 border-t" style="border-color: var(--border-default);"></div>
+            </div>
+
             <div class="flex flex-col gap-1.5">
-                <label class="text-sm font-medium" style="color: var(--text-primary);">
-                    System prompt <span class="font-normal" style="color: var(--text-tertiary);">(optional)</span>
-                </label>
+                <div class="flex items-center justify-between">
+                    <label class="text-sm font-medium" style="color: var(--text-primary);">
+                        System prompt <span class="font-normal" style="color: var(--text-tertiary);">(optional)</span>
+                    </label>
+                    <button type="button" @click="useDefaultSystemPrompt"
+                        class="text-xs px-2 py-1 rounded-md transition-colors duration-150 border"
+                        style="color: var(--color-primary); border-color: var(--color-primary); background: transparent;"
+                        onmouseenter="this.style.background='var(--color-primary)';this.style.color='white'"
+                        onmouseleave="this.style.background='transparent';this.style.color='var(--color-primary)'">
+                        Use default
+                    </button>
+                </div>
                 <textarea :value="draftSystemPrompt"
                     @input="draftSystemPrompt = ($event.target as HTMLTextAreaElement).value"
-                    placeholder="You are a helpful assistant with access to MCP tools..." rows="3"
+                    placeholder="You are a helpful assistant with access to MCP tools..." rows="5"
                     class="w-full px-3 py-2 text-sm rounded-lg border outline-none resize-y transition-colors duration-150"
                     style="background: var(--bg-input); color: var(--text-primary); border-color: var(--border-default); font-family: var(--font-sans);" />
                 <p class="text-xs" style="color: var(--text-tertiary);">Injected as the system message before every
-                    conversation</p>
+                    conversation. Click <strong>Use default</strong> to load the recommended agentic prompt.</p>
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+                <label for="max-iterations" class="text-sm font-medium" style="color: var(--text-primary);">Maximum
+                    iterations</label>
+                <div class="flex items-center gap-3">
+                    <input id="max-iterations" type="number" min="1" max="50" step="1" :value="draftMaxIterations"
+                        @input="draftMaxIterations = Math.max(1, Math.min(50, Number(($event.target as HTMLInputElement).value)))"
+                        class="w-24 px-3 py-2 text-sm rounded-lg border outline-none transition-colors duration-150"
+                        style="background: var(--bg-input); color: var(--text-primary); border-color: var(--border-default);" />
+                    <span class="text-xs" style="color: var(--text-tertiary);">consecutive tool calls per message</span>
+                </div>
+                <p class="text-xs" style="color: var(--text-tertiary);">Maximum number of consecutive tool-call
+                    iterations per
+                    message. Prevents runaway loops (1–50).</p>
             </div>
 
             <!-- ══ Save button ════════════════════════════════════════════════ -->

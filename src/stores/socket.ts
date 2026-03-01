@@ -64,7 +64,14 @@ export const useSocketStore = defineStore("socket", () => {
   async function selectTenant(tenantId: string): Promise<void> {
     // selectTenant must be called on every namespace so each socket joins
     // the tenant room and subsequent broadcasts reach all of them.
-    const namespaces = ["tenants", "endpoints", "tools", "keys", "agent"];
+    const namespaces = [
+      "tenants",
+      "endpoints",
+      "tools",
+      "keys",
+      "chat",
+      "agent",
+    ];
     await Promise.all(
       namespaces.map(
         (ns) =>

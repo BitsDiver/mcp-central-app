@@ -1,29 +1,19 @@
 <script setup lang="ts">
   import { ref, computed } from 'vue';
+  import ContextRing from '@/components/chat/ContextRing.vue';
+  import ContextDetailPopover from '@/components/chat/ContextDetailPopover.vue';
+  import ModelSelector from '@/components/chat/ModelSelector.vue';
   import type { ChatAttachment } from '@/types';
 
   const props = defineProps<{
     disabled?: boolean;
     isGenerating?: boolean;
-    /** 0–1 ratio of context window consumed. Shown as a thin coloured bar. */
+    /** 0–1 ratio of context window consumed */
     contextUsage?: number;
     contextTokens?: number;
     contextSize?: number;
+    toolCount?: number;
   }>();
-
-  const contextLevel = computed(() => {
-    const r = props.contextUsage ?? 0;
-    if (r >= 0.90) return 'full';
-    if (r >= 0.80) return 'high';
-    if (r >= 0.60) return 'mid';
-    return 'low';
-  });
-
-  const contextTitle = computed(() => {
-    if (!props.contextTokens || !props.contextSize) return '';
-    const pct = Math.round((props.contextUsage ?? 0) * 100);
-    return `Context: ${props.contextTokens.toLocaleString()} / ${props.contextSize.toLocaleString()} tokens (${pct}%)`;
-  });
 
   const emit = defineEmits<{
     send: [content: string, attachments: ChatAttachment[]];
@@ -36,12 +26,16 @@
   const textarea = ref<HTMLTextAreaElement | null>(null);
 
   const canSend = computed(() => (text.value.trim().length > 0 || attachments.value.length > 0) && !props.disabled);
+  const showContextDetail = ref(false);
 
+  const effectiveUsage = computed(() => props.contextUsage ?? 0);
+
+  /** Auto-grow to max 12 lines (~252 px at 1.5 line-height * 14px) */
   function autoResize() {
     const el = textarea.value;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 252)}px`;
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -110,11 +104,32 @@
 
 <template>
   <div class="chat-input-wrapper">
+    <!-- ── Header: attach (left) + context ring (right) ── -->
+    <div class="input-header">
+      <button type="button" class="icon-btn" @click="openFilePicker" title="Attach file">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path
+            d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"
+            stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </button>
+
+      <button v-if="contextSize" type="button" class="context-ring-btn" title="Context window details"
+        @click="showContextDetail = !showContextDetail">
+        <ContextRing :usage="effectiveUsage" :size="18" />
+      </button>
+    </div>
+
+    <!-- ── Context detail popover ──────────────────────── -->
+    <ContextDetailPopover v-if="showContextDetail" :used-tokens="contextTokens ?? 0" :context-size="contextSize ?? 0"
+      :usage="effectiveUsage" @close="showContextDetail = false" />
+
+    <!-- ── Attachment previews ─────────────────────────── -->
     <div v-if="attachments.length > 0" class="attachment-preview">
       <div v-for="att in attachments" :key="att.id" class="preview-item">
         <img v-if="att.type.startsWith('image/')" :src="att.base64" :alt="att.name" class="preview-image" />
         <div v-else class="preview-file">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke-linecap="round"
               stroke-linejoin="round" />
             <polyline points="14 2 14 8 20 8" stroke-linecap="round" stroke-linejoin="round" />
@@ -123,45 +138,47 @@
           <span class="preview-size">{{ formatSize(att.size) }}</span>
         </div>
         <button type="button" class="preview-remove" @click="removeAttachment(att.id)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
             <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" />
           </svg>
         </button>
       </div>
     </div>
 
-    <div class="input-row">
-      <button type="button" class="icon-btn" @click="openFilePicker" title="Attach file">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
-          <path
-            d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"
-            stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
+    <!-- ── Textarea ────────────────────────────────────── -->
+    <textarea ref="textarea" v-model="text" :disabled="disabled"
+      placeholder="Message… (Enter to send, Shift+Enter for new line)" class="message-textarea" rows="1"
+      @keydown="handleKeydown" @input="autoResize" />
 
-      <textarea ref="textarea" v-model="text" :disabled="disabled"
-        placeholder="Message... (Enter to send, Shift+Enter for new line)" class="message-textarea" rows="1"
-        @keydown="handleKeydown" @input="autoResize" />
-
-      <button type="button" :class="['send-btn', isGenerating ? 'send-stop' : canSend ? 'send-active' : 'send-idle']"
-        @click="isGenerating ? emit('stop') : sendMessage()" :title="isGenerating ? 'Stop generation' : 'Send message'">
-        <svg v-if="isGenerating" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="6" y="6" width="12" height="12" rx="2" />
-        </svg>
-        <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </button>
+    <!-- ── Footer: model selector + tools (left) + send (right) ── -->
+    <div class="input-footer">
+      <div class="footer-left">
+        <ModelSelector />
+        <span v-if="toolCount" class="tool-badge" :title="`${toolCount} tool${toolCount !== 1 ? 's' : ''} available`">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path
+              d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"
+              stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span class="tool-count">{{ toolCount }}</span>
+        </span>
+      </div>
+      <div class="footer-right">
+        <button type="button" :class="['icon-btn', 'send-icon', { 'send-active': canSend, 'send-stop': isGenerating }]"
+          @click="isGenerating ? emit('stop') : sendMessage()" :disabled="!isGenerating && !canSend"
+          :title="isGenerating ? 'Stop generation (Enter)' : 'Send message (Enter)'">
+          <svg v-if="isGenerating" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="6" width="12" height="12" rx="2" />
+          </svg>
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M5 12h14M12 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <input ref="fileInput" type="file" multiple accept="image/*,.pdf,.txt,.md,.json,.csv,.ts,.js,.py,.html,.css"
       class="hidden" @change="handleFiles" />
-
-    <!-- Context window usage bar -->
-    <div v-if="contextUsage !== undefined && contextUsage > 0" class="context-bar-track" :title="contextTitle">
-      <div class="context-bar-fill" :data-level="contextLevel"
-        :style="{ width: `${Math.min((contextUsage ?? 0) * 100, 100)}%` }" />
-    </div>
   </div>
 </template>
 
@@ -171,7 +188,7 @@
     border-radius: var(--radius-xl);
     background: var(--bg-surface);
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
-    padding: 4px 4px 4px 8px;
+    overflow: hidden;
   }
 
   .chat-input-wrapper:focus-within {
@@ -179,11 +196,83 @@
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
 
+  /* ── Header ────────────────────────────────────────── */
+  .input-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px 0;
+  }
+
+  .context-ring-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition: background-color 0.12s ease;
+  }
+
+  .context-ring-btn:hover {
+    background: var(--bg-hover);
+  }
+
+  /* ── Shared icon button ────────────────────────────── */
+  .icon-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+    transition: color 0.12s ease, background-color 0.12s ease;
+  }
+
+  .icon-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  .icon-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  /* ── Send icon variants ────────────────────────────── */
+  .send-icon.send-active {
+    color: var(--color-primary-500);
+  }
+
+  .send-icon.send-active:hover {
+    color: var(--color-primary-600);
+    background: color-mix(in srgb, var(--color-primary-500) 10%, transparent);
+  }
+
+  .send-icon.send-stop {
+    color: var(--color-danger-500);
+  }
+
+  .send-icon.send-stop:hover {
+    color: var(--color-danger-600);
+    background: color-mix(in srgb, var(--color-danger-500) 10%, transparent);
+  }
+
+  /* ── Attachments ───────────────────────────────────── */
   .attachment-preview {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    padding: 8px 8px 4px;
+    padding: 8px 12px 0;
   }
 
   .preview-item {
@@ -192,8 +281,8 @@
   }
 
   .preview-image {
-    width: 60px;
-    height: 60px;
+    width: 52px;
+    height: 52px;
     object-fit: cover;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-default);
@@ -202,18 +291,18 @@
   .preview-file {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
     background: var(--bg-muted);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-sm);
-    padding: 6px 8px;
+    padding: 5px 7px;
     color: var(--text-secondary);
   }
 
   .preview-filename {
     font-size: 11px;
     font-weight: 500;
-    max-width: 100px;
+    max-width: 90px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -227,10 +316,10 @@
 
   .preview-remove {
     position: absolute;
-    top: -5px;
-    right: -5px;
-    width: 16px;
-    height: 16px;
+    top: -4px;
+    right: -4px;
+    width: 15px;
+    height: 15px;
     border-radius: 50%;
     background: var(--color-neutral-600);
     color: white;
@@ -246,35 +335,10 @@
     background: var(--color-danger-500);
   }
 
-  .input-row {
-    display: flex;
-    align-items: flex-end;
-    gap: 4px;
-  }
-
-  .icon-btn {
-    width: 34px;
-    height: 34px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-md);
-    border: none;
-    background: none;
-    cursor: pointer;
-    color: var(--text-tertiary);
-    flex-shrink: 0;
-    transition: color 0.12s ease, background-color 0.12s ease;
-    margin-bottom: 2px;
-  }
-
-  .icon-btn:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
-  }
-
+  /* ── Textarea ──────────────────────────────────────── */
   .message-textarea {
-    flex: 1;
+    display: block;
+    width: 100%;
     resize: none;
     border: none;
     outline: none;
@@ -283,10 +347,11 @@
     font-size: 14px;
     line-height: 1.5;
     color: var(--text-primary);
-    padding: 8px 6px;
+    padding: 8px 14px;
     min-height: 38px;
-    max-height: 200px;
+    max-height: 252px;
     overflow-y: auto;
+    box-sizing: border-box;
   }
 
   .message-textarea::placeholder {
@@ -297,76 +362,48 @@
     opacity: 0.5;
   }
 
-  .send-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: var(--radius-md);
-    border: none;
-    cursor: pointer;
+  /* ── Footer ────────────────────────────────────────── */
+  .input-footer {
     display: flex;
     align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: all 0.15s ease;
-    margin-bottom: 2px;
+    justify-content: space-between;
+    padding: 2px 6px 6px;
   }
 
-  .send-active {
-    background: var(--color-primary-500);
-    color: white;
+  .footer-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
   }
 
-  .send-active:hover {
-    background: var(--color-primary-600);
-  }
-
-  .send-stop {
-    background: var(--color-danger-500);
-    color: white;
-  }
-
-  .send-stop:hover {
-    background: var(--color-danger-600);
-  }
-
-  .send-idle {
-    background: var(--bg-muted);
+  .tool-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 500;
     color: var(--text-tertiary);
     cursor: default;
+    white-space: nowrap;
+  }
+
+  .tool-badge svg {
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+
+  .tool-count {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .footer-right {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
   }
 
   .hidden {
     display: none;
-  }
-
-  /* ── Context bar ─────────────────────────────────────────── */
-  .context-bar-track {
-    height: 2px;
-    margin: 3px 6px 2px;
-    border-radius: 2px;
-    overflow: hidden;
-    background: var(--border-default);
-  }
-
-  .context-bar-fill {
-    height: 100%;
-    border-radius: 2px;
-    transition: width 0.5s ease, background-color 0.3s ease;
-  }
-
-  .context-bar-fill[data-level='low'] {
-    background: #22c55e;
-  }
-
-  .context-bar-fill[data-level='mid'] {
-    background: #f59e0b;
-  }
-
-  .context-bar-fill[data-level='high'] {
-    background: #f97316;
-  }
-
-  .context-bar-fill[data-level='full'] {
-    background: #ef4444;
   }
 </style>

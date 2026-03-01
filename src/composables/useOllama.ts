@@ -6,6 +6,7 @@ interface OllamaMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
   images?: string[];
+  tool_calls?: OllamaToolCall[];
   tool_call_id?: string;
 }
 
@@ -80,7 +81,15 @@ function messagesToOllama(
       }
       result.push(ollMsg);
     } else if (msg.role === "assistant") {
-      result.push({ role: "assistant", content: msg.content });
+      const assistantMsg: OllamaMessage = {
+        role: "assistant",
+        content: msg.content,
+      };
+      // Preserve tool_calls so multi-turn tool context is correct
+      if ((msg as any)._ollamaToolCalls?.length) {
+        assistantMsg.tool_calls = (msg as any)._ollamaToolCalls;
+      }
+      result.push(assistantMsg);
     } else if (msg.role === "tool" && msg.toolCalls?.length) {
       for (const tc of msg.toolCalls) {
         result.push({
@@ -112,6 +121,8 @@ export function useOllama() {
     ollamaApiKey?: string;
     model: string;
     contextSize: number;
+    /** Maximum consecutive tool-call iterations before the loop exits. */
+    maxIterations?: number;
     systemPrompt?: string;
     messages: ChatMessage[];
     tools: Tool[];
@@ -130,6 +141,7 @@ export function useOllama() {
       ollamaApiKey,
       model,
       contextSize,
+      maxIterations = 15,
       systemPrompt,
       messages,
       tools,
@@ -142,6 +154,7 @@ export function useOllama() {
 
     try {
       let continueLoop = true;
+      let iterationCount = 0;
       let loopMessages = [...messages];
 
       while (continueLoop && isGenerating.value) {
@@ -153,6 +166,10 @@ export function useOllama() {
         };
         if (ollamaApiKey) headers["Authorization"] = `Bearer ${ollamaApiKey}`;
 
+        // When tools are provided, disable streaming — many models (e.g. qwen3)
+        // only populate tool_calls in the non-streaming response.
+        const useStreaming = !ollTools?.length;
+
         const res = await fetch(`${ollamaUrl}/api/chat`, {
           method: "POST",
           headers,
@@ -161,7 +178,10 @@ export function useOllama() {
             model,
             messages: ollMessages,
             tools: ollTools,
-            stream: true,
+            stream: useStreaming,
+            // Disable thinking mode when tools are present — models like qwen3
+            // otherwise reason about tools in text instead of emitting tool_calls.
+            ...(ollTools?.length ? { think: false } : {}),
             options: { num_ctx: contextSize },
           }),
         });
@@ -172,115 +192,168 @@ export function useOllama() {
           break;
         }
 
-        const reader = res.body?.getReader();
-        if (!reader) {
-          onError("No response body from Ollama");
-          break;
-        }
-
-        const decoder = new TextDecoder();
         let accContent = "";
         let accThinking = "";
         let pendingToolCalls: OllamaToolCall[] = [];
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        if (!useStreaming) {
+          // ── Non-streaming path (tools mode) ──────────────────────────────
+          const json = (await res.json()) as OllamaStreamChunk;
 
-          const lines = decoder.decode(value).split("\n").filter(Boolean);
-          for (const line of lines) {
-            let chunk: OllamaStreamChunk;
-            try {
-              chunk = JSON.parse(line);
-            } catch {
-              continue;
+          if (json.message?.tool_calls?.length) {
+            pendingToolCalls.push(...json.message.tool_calls);
+          }
+          if (json.message?.thinking) {
+            accThinking = json.message.thinking;
+          }
+          if (json.message?.content) {
+            const parsed = parseThinking(json.message.content);
+            if (parsed.thinking) {
+              accThinking = parsed.thinking;
+              accContent = parsed.text;
+            } else {
+              accContent = json.message.content;
             }
+          }
+          onToken(accContent, accThinking);
 
-            if (chunk.message?.tool_calls?.length) {
-              pendingToolCalls.push(...chunk.message.tool_calls);
-            }
+          const used = (json.prompt_eval_count ?? 0) + (json.eval_count ?? 0);
+          if (used > 0) onUsage?.(used);
+        } else {
+          // ── Streaming path (no tools) ────────────────────────────────────
+          const reader = res.body?.getReader();
+          if (!reader) {
+            onError("No response body from Ollama");
+            break;
+          }
 
-            if (chunk.message?.thinking) {
-              accThinking += chunk.message.thinking;
-            }
+          const decoder = new TextDecoder();
+          let buffer = ""; // NDJSON line buffer for chunk boundaries
 
-            if (chunk.message?.content) {
-              const delta = chunk.message.content;
-              const combined = accContent + delta;
-              const parsed = parseThinking(combined);
-              if (parsed.thinking) {
-                accThinking = parsed.thinking;
-                accContent = parsed.text;
-              } else {
-                accContent = combined;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            // Keep the last (possibly incomplete) line in the buffer
+            buffer = lines.pop() ?? "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed) continue;
+
+              let chunk: OllamaStreamChunk;
+              try {
+                chunk = JSON.parse(trimmed);
+              } catch {
+                continue;
               }
-              onToken(accContent, accThinking);
-            }
 
-            if (chunk.done) {
-              // Report token usage from the final done chunk
-              const used =
-                (chunk.prompt_eval_count ?? 0) + (chunk.eval_count ?? 0);
-              if (used > 0) onUsage?.(used);
+              if (chunk.message?.tool_calls?.length) {
+                pendingToolCalls.push(...chunk.message.tool_calls);
+              }
 
-              if (pendingToolCalls.length > 0) {
-                continueLoop = true;
-                const toolResultMessages: ChatMessage[] = [];
+              if (chunk.message?.thinking) {
+                accThinking += chunk.message.thinking;
+              }
 
-                for (const tc of pendingToolCalls) {
-                  const toolCall: ChatToolCall = {
-                    id: `tc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                    name: tc.function.name,
-                    args: tc.function.arguments,
-                    status: "running",
-                  };
-                  await onToolCall(toolCall);
-
-                  try {
-                    const result = await callMcpTool(
-                      tc.function.name,
-                      tc.function.arguments,
-                    );
-                    toolCall.result = result;
-                    toolCall.status = "success";
-                    await onToolCall(toolCall);
-                  } catch (err) {
-                    toolCall.error =
-                      err instanceof Error ? err.message : String(err);
-                    toolCall.status = "error";
-                    await onToolCall(toolCall);
-                  }
-
-                  toolResultMessages.push({
-                    id: toolCall.id,
-                    role: "tool",
-                    content: "",
-                    toolCalls: [toolCall],
-                    createdAt: new Date().toISOString(),
-                  });
+              if (chunk.message?.content) {
+                const delta = chunk.message.content;
+                const combined = accContent + delta;
+                const parsed = parseThinking(combined);
+                if (parsed.thinking) {
+                  accThinking = parsed.thinking;
+                  accContent = parsed.text;
+                } else {
+                  accContent = combined;
                 }
+                onToken(accContent, accThinking);
+              }
 
-                loopMessages = [
-                  ...loopMessages,
-                  {
-                    id: `asst-${Date.now()}`,
-                    role: "assistant" as const,
-                    content: accContent,
-                    thinking: accThinking || undefined,
-                    createdAt: new Date().toISOString(),
-                  },
-                  ...toolResultMessages,
-                ];
-
-                accContent = "";
-                accThinking = "";
-                pendingToolCalls = [];
-              } else {
-                continueLoop = false;
-                onDone(accContent, accThinking);
+              if (chunk.done) {
+                const used =
+                  (chunk.prompt_eval_count ?? 0) + (chunk.eval_count ?? 0);
+                if (used > 0) onUsage?.(used);
               }
             }
           }
+        }
+
+        // ── Post-response: handle tool calls or finish ────────────────────
+        if (pendingToolCalls.length > 0) {
+          iterationCount++;
+          if (iterationCount >= maxIterations) {
+            // Max iterations reached — stop the loop gracefully
+            continueLoop = false;
+            onDone(accContent, accThinking);
+          } else {
+            continueLoop = true;
+            const toolResultMessages: ChatMessage[] = [];
+
+            for (const tc of pendingToolCalls) {
+              const toolCall: ChatToolCall = {
+                id: `tc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                name: tc.function.name,
+                args: tc.function.arguments,
+                status: "running",
+              };
+              await onToolCall(toolCall);
+
+              try {
+                const result = await callMcpTool(
+                  tc.function.name,
+                  tc.function.arguments,
+                );
+                // Map MCP-level isError into toolCall status
+                const mcpResult = result as { isError?: boolean } | undefined;
+                if (mcpResult?.isError) {
+                  toolCall.result = result;
+                  toolCall.status = "error";
+                } else {
+                  toolCall.result = result;
+                  toolCall.status = "success";
+                }
+                await onToolCall(toolCall);
+              } catch (err) {
+                toolCall.error =
+                  err instanceof Error ? err.message : String(err);
+                toolCall.status = "error";
+                await onToolCall(toolCall);
+              }
+
+              toolResultMessages.push({
+                id: toolCall.id,
+                role: "tool",
+                content: "",
+                toolCalls: [toolCall],
+                createdAt: new Date().toISOString(),
+              });
+            }
+
+            loopMessages = [
+              ...loopMessages,
+              // Include tool_calls in assistant message so Ollama has full context
+              Object.assign(
+                {
+                  id: `asst-${Date.now()}`,
+                  role: "assistant" as const,
+                  content: accContent,
+                  thinking: accThinking || undefined,
+                  createdAt: new Date().toISOString(),
+                },
+                { _ollamaToolCalls: pendingToolCalls },
+              ),
+              ...toolResultMessages,
+            ];
+
+            accContent = "";
+            accThinking = "";
+            pendingToolCalls = [];
+          }
+        } else {
+          continueLoop = false;
+          onDone(accContent, accThinking);
         }
       }
     } catch (err) {
