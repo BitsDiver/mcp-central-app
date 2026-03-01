@@ -1,12 +1,14 @@
 import { ref, watch } from "vue";
 import { useTenantStore } from "@/stores/tenant";
+import { useAuthStore } from "@/stores/auth";
 import {
   getChatKey,
   clearChatKey,
   storeChatKey,
 } from "@/composables/useChatMcpKey";
 import { initMcpSession, resetMcpSession } from "@/api/mcpClient";
-import { emitChat } from "@/api/socket";
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
 /**
  * useChatMcpSession — manages the MCP chat-key lifecycle.
@@ -33,15 +35,18 @@ export function useChatMcpSession() {
       }
     }
 
-    // 2. Ask the backend for a fresh chat key (getOrCreate)
+    // 2. Ask the backend for a fresh chat key via HTTP (getOrCreate)
     try {
-      const res = await emitChat<{ id: string; key: string }>(
-        "getChatMcpKey",
-        {},
+      const token = useAuthStore().token;
+      const res = await fetch(
+        `${BASE_URL}/api/ai-keys/mcp-session?tenantId=${encodeURIComponent(tenantId)}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
       );
-      if (res.status !== "success" || !res.data) return;
-      storeChatKey(tenantId, res.data.id, res.data.key);
-      await initMcpSession(res.data.key);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      if (json.status !== "success" || !json.data) return;
+      storeChatKey(tenantId, json.data.id, json.data.key);
+      await initMcpSession(json.data.key);
       chatKeyReady.value = true;
     } catch (e) {
       console.warn("[MCP session] provisioning failed:", e);

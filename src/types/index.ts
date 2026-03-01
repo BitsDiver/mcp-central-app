@@ -198,6 +198,12 @@ export interface ChatSettings {
   ollamaUrl: string;
   /** Optional Bearer token for Ollama instances exposed with authentication */
   ollamaApiKey?: string;
+  /**
+   * Where Ollama requests are routed.
+   * 'browser'  → fetch http://localhost:11434 directly from the browser (default)
+   * 'backend'  → proxy through the mcp-central backend (POST /api/chat)
+   */
+  ollamaPath: "browser" | "backend";
   selectedModel: string;
   contextSize: number;
   systemPrompt: string;

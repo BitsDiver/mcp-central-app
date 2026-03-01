@@ -60,7 +60,6 @@ export function connectAll(token: string): {
   endpoints: Socket;
   tools: Socket;
   keys: Socket;
-  chat: Socket;
   agent: Socket;
 } {
   return {
@@ -68,13 +67,12 @@ export function connectAll(token: string): {
     endpoints: makeAuthSocket("endpoints", token),
     tools: makeAuthSocket("tools", token),
     keys: makeAuthSocket("keys", token),
-    chat: makeAuthSocket("chat", token),
     agent: makeAuthSocket("agent", token),
   };
 }
 
 export function disconnectAll(): void {
-  ["tenants", "endpoints", "tools", "keys", "chat", "agent"].forEach((ns) => {
+  ["tenants", "endpoints", "tools", "keys", "agent"].forEach((ns) => {
     sockets[ns]?.disconnect();
     delete sockets[ns];
   });
@@ -117,7 +115,6 @@ export const emitTenants = makeEmit("tenants");
 export const emitEndpoints = makeEmit("endpoints");
 export const emitTools = makeEmit("tools");
 export const emitKeys = makeEmit("keys");
-export const emitChat = makeEmit("chat");
 export const emitAgent = makeEmit("agent");
 
 // ── i18n socket (/i18n namespace — public) ───────────────────────────

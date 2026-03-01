@@ -1,69 +1,39 @@
 <script setup lang="ts">
   import { computed } from 'vue';
-  import type { ChatMessage } from '@/types';
   import { renderMarkdown } from '@/composables/useMarkdown';
-  import ThinkingBlock from './ThinkingBlock.vue';
-  import ToolCallBlock from './ToolCallBlock.vue';
-  import PlanBlock from './PlanBlock.vue';
-  import AgentBlock from './AgentBlock.vue';
+  import ThinkingBlock from '@/components/chat/ThinkingBlock.vue';
+  import ToolCallBlock from '@/components/chat/ToolCallBlock.vue';
+  import PlanBlock from '@/components/chat/PlanBlock.vue';
+  import type { ChatMessage } from '@/types';
 
   const props = defineProps<{
     message: ChatMessage;
-    /** True when this user message was immediately followed by a failed generation */
-    canRetry?: boolean;
+    canRetry: boolean;
   }>();
 
-  const emit = defineEmits<{
-    retry: [messageId: string];
-  }>();
+  const emit = defineEmits<{ retry: [userMsgId: string]; }>();
 
   const isUser = computed(() => props.message.role === 'user');
-  const isTool = computed(() => props.message.role === 'tool');
+  const isAssistant = computed(() => props.message.role === 'assistant');
   const isPlan = computed(() => props.message.role === 'plan');
-  const isAgent = computed(() => props.message.role === 'agent');
-  const isError = computed(() => !!props.message.error);
 
-  const formattedTime = computed(() => {
-    return new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' }).format(
-      new Date(props.message.createdAt),
-    );
-  });
+  const renderedContent = computed(() =>
+    props.message.content ? renderMarkdown(props.message.content) : '',
+  );
 
-  const hasAttachments = computed(() => (props.message.attachments?.length ?? 0) > 0);
-  const hasThinking = computed(() => !!props.message.thinking);
-  const hasContent = computed(() => !!props.message.content || props.message.isStreaming);
 </script>
 
 <template>
-  <!-- Tool call messages — full-width, dashed border -->
-  <div v-if="isTool" class="tool-wrapper">
-    <div class="bubble-tool">
-      <ToolCallBlock v-for="tc in message.toolCalls" :key="tc.id" :tool-call="tc" />
-    </div>
-  </div>
-
-  <!-- Plan message — full-width, PlanBlock UI -->
-  <div v-else-if="isPlan" class="plan-wrapper">
-    <PlanBlock v-if="message.agentPlan" :plan="message.agentPlan" />
-    <p v-else class="text-tertiary" style="font-size:12px">Generating plan…</p>
-  </div>
-
-  <!-- Agent task update message -->
-  <div v-else-if="isAgent" class="agent-wrapper">
-    <AgentBlock v-if="message.agentTask" :task="message.agentTask" />
-  </div>
-
-  <!-- User / assistant messages -->
-  <div v-else :class="['msg-row', isUser ? 'msg-row--user' : 'msg-row--assistant']">
-    <div class="msg-body">
+  <!-- ── User bubble ──────────────────────────────────────────────────── -->
+  <div v-if="isUser" class="msg-row msg-row--user">
+    <div class="user-bubble">
+      <div class="markdown-body user-markdown" v-html="renderMarkdown(message.content)" />
       <!-- Attachments -->
-      <div v-if="hasAttachments" class="attachment-list">
+      <div v-if="message.attachments?.length" class="attachment-list">
         <div v-for="att in message.attachments" :key="att.id" class="attachment-item">
-          <template v-if="att.type.startsWith('image/')">
-            <img :src="att.base64" :alt="att.name" class="attachment-image" />
-          </template>
+          <img v-if="att.type.startsWith('image/')" :src="att.base64" :alt="att.name" class="attachment-image" />
           <template v-else>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke-linecap="round" />
               <polyline points="14 2 14 8 20 8" stroke-linecap="round" />
             </svg>
@@ -71,164 +41,164 @@
           </template>
         </div>
       </div>
+    </div>
+  </div>
 
-      <!-- User bubble (neutral card) -->
-      <div v-if="isUser" class="bubble bubble--user">
-        <div class="markdown-body user-markdown" v-html="renderMarkdown(message.content)" />
-        <p class="msg-time">{{ formattedTime }}</p>
+  <!-- ── Plan generating (no plan yet) ─────────────────────────────── -->
+  <div v-else-if="isPlan && !message.agentPlan" class="msg-row msg-row--assistant">
+    <div class="assistant-avatar" :class="{ 'assistant-avatar--streaming': message.isStreaming }">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        aria-hidden="true">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round"
+          stroke-linejoin="round" />
+      </svg>
+    </div>
+    <div class="assistant-body">
+      <div v-if="message.error" class="assistant-error">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 8v4M12 16h.01" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>{{ message.error }}</span>
+      </div>
+      <!-- Live markdown: renders the plan as # title + ## tasks appear token by token -->
+      <div v-else-if="renderedContent" class="markdown-body assistant-markdown" v-html="renderedContent" />
+      <!-- No content yet: pulse dots while the first tokens arrive -->
+      <span v-else-if="message.isStreaming" class="streaming-dots-row">
+        <span class="dot" /><span class="dot" /><span class="dot" />
+      </span>
+    </div>
+  </div>
+
+  <!-- ── Plan card ───────────────────────────────────────────────────── -->
+  <div v-else-if="isPlan && message.agentPlan" class="msg-row msg-row--assistant">
+    <div class="assistant-avatar">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        aria-hidden="true">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round"
+          stroke-linejoin="round" />
+      </svg>
+    </div>
+    <div class="assistant-body">
+      <PlanBlock :plan="message.agentPlan" :is-streaming="message.isStreaming" />
+    </div>
+  </div>
+
+  <!-- ── Assistant turn ─────────────────────────────────────────────── -->
+  <div v-else-if="isAssistant" class="msg-row msg-row--assistant">
+    <div class="assistant-avatar" :class="{ 'assistant-avatar--streaming': message.isStreaming }">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        aria-hidden="true">
+        <circle cx="12" cy="12" r="3" />
+        <path
+          d="M19.07 4.93l-1.41 1.41M12 2v2M4.93 4.93l1.41 1.41M2 12h2m14 0h2M4.93 19.07l1.41-1.41M12 20v2m5.66-2.34l-1.41-1.41"
+          stroke-linecap="round" />
+      </svg>
+    </div>
+
+    <div class="assistant-body">
+      <!-- Thinking (reasoning) — auto-expands during streaming -->
+      <ThinkingBlock v-if="message.thinking !== undefined" :content="message.thinking ?? ''"
+        :is-streaming="message.isStreaming" />
+
+      <!-- Tool calls — timeline -->
+      <div v-if="message.toolCalls?.length" class="tool-timeline">
+        <ToolCallBlock v-for="tc in message.toolCalls" :key="tc.id" :tool-call="tc" />
       </div>
 
-      <!-- Assistant area: no bubble, just flowing content -->
-      <div v-else class="assistant-content" :class="{ 'assistant-content--error': isError }">
-        <ThinkingBlock v-if="hasThinking || (message.isStreaming && !message.content)"
-          :content="message.thinking ?? ''" />
-
-        <!-- Error state -->
-        <div v-if="isError" class="error-inline">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            class="shrink-0" style="margin-top:1px">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 8v4M12 16h.01" stroke-linecap="round" />
-          </svg>
-          <span>{{ message.error }}</span>
-        </div>
-
-        <!-- Normal content -->
-        <template v-else-if="hasContent">
-          <div class="markdown-body assistant-markdown" v-html="renderMarkdown(message.content)" />
-          <span v-if="message.isStreaming" class="streaming-cursor" />
-        </template>
-
-        <!-- Loading dots -->
-        <p v-else-if="!hasThinking && message.isStreaming" class="streaming-placeholder">
-          <span class="streaming-dots"><span /><span /><span /></span>
-        </p>
-
-        <p class="msg-time">{{ formattedTime }}</p>
+      <!-- Error state -->
+      <div v-if="message.error" class="assistant-error">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 8v4M12 16h.01" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>{{ message.error }}</span>
       </div>
 
-      <!-- Retry button (under the user message that preceded a failed generation) -->
-      <div v-if="isUser && canRetry" class="retry-row">
-        <button type="button" class="retry-btn" @click="emit('retry', message.id)">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M1 4v6h6M23 20v-6h-6" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" stroke-linecap="round"
-              stroke-linejoin="round" />
-          </svg>
-          Retry
-        </button>
-      </div>
+      <!-- Prose content -->
+      <div v-if="renderedContent" class="markdown-body assistant-markdown" v-html="renderedContent" />
+
+      <!-- Streaming cursor (no content yet) -->
+      <span v-if="message.isStreaming && !message.content && !message.thinking" class="streaming-dots-row">
+        <span class="dot" /><span class="dot" /><span class="dot" />
+      </span>
+      <span v-else-if="message.isStreaming && !message.content" class="streaming-cursor" />
+
+      <!-- Retry -->
+      <button v-if="canRetry" type="button" class="retry-btn" title="Retry from here"
+        @click="emit('retry', message.id)">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M1 4v6h6M23 20v-6h-6" stroke-linecap="round" stroke-linejoin="round" />
+          <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" stroke-linecap="round"
+            stroke-linejoin="round" />
+        </svg>
+        Retry
+      </button>
     </div>
   </div>
 </template>
 
 <style scoped>
 
-  /* ── Tool messages ────────────────────────────────────────────── */
-  .tool-wrapper {
-    padding: 2px 0;
-  }
-
-  .bubble-tool {
-    background: var(--bg-muted);
-    border: 1px dashed var(--border-default);
-    border-radius: var(--radius-md);
-    padding: 8px 12px;
-  }
-
-  /* ── Plan messages ────────────────────────────────────────────── */
-  .plan-wrapper {
-    padding: 4px 0;
-  }
-
-  /* ── Agent task messages ──────────────────────────────────────── */
-  .agent-wrapper {
-    padding: 2px 0;
-  }
-
-  /* ── Row layout ───────────────────────────────────────────────── */
+  /* ── Row layout ─────────────────────────────────────────── */
   .msg-row {
     display: flex;
     gap: 10px;
-    padding: 2px 0;
+    width: 100%;
   }
 
   .msg-row--user {
-    flex-direction: row-reverse;
+    justify-content: flex-end;
   }
 
   .msg-row--assistant {
-    flex-direction: row;
+    justify-content: flex-start;
+    align-items: flex-start;
   }
 
-  /* ── Body column ──────────────────────────────────────────────── */
-  .msg-body {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    max-width: min(700px, 90%);
+  /* ── User bubble ────────────────────────────────────────── */
+  .user-bubble {
+    max-width: min(72%, 640px);
+    background: var(--color-primary-600);
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: var(--radius-2xl) var(--radius-2xl) var(--radius-sm) var(--radius-2xl);
+    word-break: break-word;
+    line-height: 1.6;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   }
 
-  .msg-row--user .msg-body {
-    align-items: flex-end;
+  [data-theme="dark"] .user-bubble {
+    background: var(--color-primary-500);
   }
 
-  /* ── User bubble (neutral card, right-aligned) ───────────────── */
-  .bubble {
-    padding: 9px 13px;
-    border-radius: 12px;
+  .user-bubble :deep(.markdown-body) {
     font-size: 14px;
     line-height: 1.65;
+    color: inherit;
   }
 
-  .bubble--user {
-    background: var(--bg-muted);
-    color: var(--text-primary);
-    border: 1px solid var(--border-default);
-    border-bottom-right-radius: 4px;
-    max-width: min(560px, 100%);
+  .user-bubble :deep(.markdown-body p:first-child) {
+    margin-top: 0;
   }
 
-  [data-theme="dark"] .bubble--user {
-    background: #2a2d35;
-    border-color: #3a3d45;
+  .user-bubble :deep(.markdown-body p:last-child) {
+    margin-bottom: 0;
   }
 
-  /* ── Assistant content (no bubble, plain text) ────────────────── */
-  .assistant-content {
-    flex: 1;
-    min-width: 0;
-    font-size: 14px;
-    line-height: 1.7;
-    color: var(--text-primary);
-    padding: 2px 0;
+  .user-bubble :deep(.markdown-body code) {
+    background: rgba(255, 255, 255, 0.18);
+    color: inherit;
+    padding: 1px 4px;
+    border-radius: 3px;
   }
 
-  /* Error inline chip */
-  .error-inline {
-    display: inline-flex;
-    align-items: flex-start;
-    gap: 7px;
-    font-size: 13px;
-    background: var(--color-danger-50, #fef2f2);
-    border: 1px solid var(--color-danger-200, #fecaca);
-    color: var(--color-danger-700, #b91c1c);
-    border-radius: var(--radius-md);
-    padding: 7px 11px;
-  }
-
-  [data-theme="dark"] .error-inline {
-    background: rgba(239, 68, 68, 0.08);
-    border-color: rgba(239, 68, 68, 0.22);
-    color: var(--color-danger-400, #f87171);
-  }
-
-  /* ── Attachments ──────────────────────────────────────────────── */
+  /* ── Attachments (inside user bubble) ──────────────────── */
   .attachment-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 6px;
+    gap: 5px;
+    margin-top: 8px;
   }
 
   .attachment-item {
@@ -241,17 +211,9 @@
     font-size: 11px;
   }
 
-  .bubble--user .attachment-item {
-    background: rgba(0, 0, 0, 0.06);
-  }
-
-  [data-theme="dark"] .bubble--user .attachment-item {
-    background: rgba(255, 255, 255, 0.06);
-  }
-
-  .assistant-content .attachment-item {
-    max-width: 200px;
-    max-height: 150px;
+  .attachment-image {
+    max-width: 240px;
+    max-height: 160px;
     border-radius: var(--radius-sm);
     object-fit: cover;
   }
@@ -261,73 +223,113 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: inherit;
+    opacity: 0.9;
   }
 
-  /* ── Markdown body overrides (user bubble) ──────────────── */
-  .user-markdown {
+  /* ── Assistant avatar ───────────────────────────────────── */
+  .assistant-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-full);
+    background: var(--bg-muted);
+    border: 1px solid var(--border-default);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+    margin-top: 1px;
+    transition: border-color 0.2s ease, color 0.2s ease;
+  }
+
+  .assistant-avatar--streaming {
+    border-color: var(--color-primary-400);
+    color: var(--color-primary-500);
+  }
+
+  .assistant-avatar--ghost {
+    background: transparent;
+    border-color: transparent;
+  }
+
+  /* ── Assistant body ─────────────────────────────────────── */
+  .assistant-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .assistant-markdown {
     font-size: 14px;
-    color: var(--text-primary);
+    line-height: 1.75;
   }
 
-  /* ── Timestamp ────────────────────────────────────────────────── */
-  .msg-time {
-    font-size: 10px;
-    opacity: 0.45;
-    margin: 5px 0 0;
-    text-align: right;
+  .assistant-markdown :deep(p:first-child) {
+    margin-top: 0;
   }
 
-  /* ── Streaming ────────────────────────────────────────────────── */
-  .streaming-cursor {
-    display: inline-block;
-    width: 2px;
-    height: 14px;
-    background: currentColor;
-    margin-left: 2px;
-    vertical-align: text-bottom;
-    animation: blink 1s step-end infinite;
+  .assistant-markdown :deep(p:last-child) {
+    margin-bottom: 0;
   }
 
-  @keyframes blink {
-
-    0%,
-    100% {
-      opacity: 1;
-    }
-
-    50% {
-      opacity: 0;
-    }
+  /* ── Tool timeline ─────────────────────────────────────── */
+  .tool-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
   }
 
-  .streaming-placeholder {
-    margin: 2px 0 0;
+  /* ── Error state ────────────────────────────────────────── */
+  .assistant-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 9px 12px;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-danger-500) 8%, var(--bg-surface));
+    border: 1px solid color-mix(in srgb, var(--color-danger-500) 25%, var(--border-default));
+    color: var(--color-danger-600);
+    font-size: 13px;
+    line-height: 1.5;
   }
 
-  .streaming-dots {
+  [data-theme="dark"] .assistant-error {
+    color: var(--color-danger-400);
+  }
+
+  .assistant-error svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* ── Streaming states ───────────────────────────────────── */
+  .streaming-dots-row {
     display: inline-flex;
     gap: 4px;
     align-items: center;
+    padding: 4px 0;
   }
 
-  .streaming-dots span {
+  .dot {
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: currentColor;
-    opacity: 0.4;
-    animation: bounce 1.2s ease-in-out infinite;
+    background: var(--text-tertiary);
+    animation: dot-bounce 1.2s ease-in-out infinite;
   }
 
-  .streaming-dots span:nth-child(2) {
-    animation-delay: 0.2s;
+  .dot:nth-child(2) {
+    animation-delay: 0.15s;
   }
 
-  .streaming-dots span:nth-child(3) {
-    animation-delay: 0.4s;
+  .dot:nth-child(3) {
+    animation-delay: 0.3s;
   }
 
-  @keyframes bounce {
+  @keyframes dot-bounce {
 
     0%,
     80%,
@@ -342,31 +344,49 @@
     }
   }
 
-  /* ── Retry ────────────────────────────────────────────────────── */
-  .retry-row {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 2px;
+  .streaming-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 15px;
+    background: var(--text-secondary);
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    border-radius: 1px;
+    animation: cursor-blink 1s step-end infinite;
   }
 
+  @keyframes cursor-blink {
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0;
+    }
+  }
+
+  /* ── Retry button ───────────────────────────────────────── */
   .retry-btn {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 3px 9px;
+    padding: 4px 10px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: none;
+    cursor: pointer;
     font-size: 11px;
     font-weight: 500;
-    border-radius: var(--radius-full);
-    border: 1px solid var(--border-default);
-    background: var(--bg-surface);
-    color: var(--text-secondary);
-    cursor: pointer;
+    color: var(--text-tertiary);
     transition: all 0.12s ease;
+    align-self: flex-start;
   }
 
   .retry-btn:hover {
-    border-color: var(--color-primary-400);
-    color: var(--color-primary-500);
-    background: color-mix(in srgb, var(--color-primary-500) 6%, var(--bg-surface));
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+    background: var(--bg-hover);
   }
 </style>

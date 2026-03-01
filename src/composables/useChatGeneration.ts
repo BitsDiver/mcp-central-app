@@ -10,9 +10,10 @@ import { useChatStore } from "@/stores/chat";
 import { useChatSettingsStore } from "@/stores/chatSettings";
 import { useToolStore } from "@/stores/tools";
 import { useChat } from "@/composables/useChat";
-import { usePlanning } from "@/composables/usePlanning";
+import { usePlanning, parseMarkdownPlan } from "@/composables/usePlanning";
 import { useAgentOrchestrator } from "@/composables/useAgentOrchestrator";
 import { useAgentPlanningStore } from "@/stores/agentPlanning";
+import { useContextSummarizer } from "@/composables/useContextSummarizer";
 
 /**
  * useChatGeneration — encapsulates send / retry / generation orchestration.
@@ -33,6 +34,7 @@ export function useChatGeneration(
   const planning = usePlanning();
   const orchestrator = useAgentOrchestrator();
   const planningStore = useAgentPlanningStore();
+  const compressor = useContextSummarizer();
 
   const generationError = ref<string | null>(null);
   /** Cumulative token usage (prompt + completion) for the latest completed turn */
@@ -74,6 +76,17 @@ export function useChatGeneration(
      *  Updated whenever onToolCall creates a fresh assistant bubble. */
     let currentAssistantId = assistantId;
 
+    // Compress context if usage is approaching the limit
+    const { messages: compressedMessages, didCompress } =
+      await compressor.compressIfNeeded(precedingMessages, usedTokens.value);
+    const effectiveMessages = compressedMessages;
+
+    // When compression fired, inject a lightweight system note so the model
+    // knows the history was summarized.
+    const compressionNote = didCompress
+      ? "Note: Earlier conversation history has been summarized above to stay within the context limit."
+      : undefined;
+
     await generate({
       ollamaUrl: settingsStore.settings.ollamaUrl,
       ollamaApiKey: settingsStore.settings.ollamaApiKey || undefined,
@@ -82,11 +95,14 @@ export function useChatGeneration(
       maxIterations:
         maxIterationsOverride ?? settingsStore.settings.maxIterations,
       systemPrompt:
-        session?.systemPrompt ||
-        settingsStore.settings.systemPrompt ||
-        undefined,
-      messages: precedingMessages,
-      tools: chatKeyReady.value ? toolStore.tools : [],
+        [
+          session?.systemPrompt || settingsStore.settings.systemPrompt || "",
+          compressionNote,
+        ]
+          .filter(Boolean)
+          .join("\n\n") || undefined,
+      messages: effectiveMessages,
+      tools: chatKeyReady.value ? toolStore.activeTools : [],
 
       onToken(text: string, thinking: string) {
         chatStore.updateMessage(sessionId, currentAssistantId, {
@@ -179,12 +195,18 @@ export function useChatGeneration(
     });
   }
 
-  // ── Plan mode ──────────────────────────────────────────────
+  // ── Agent mode (orchestrated, auto-approved) ───────────────
 
-  async function runPlanMode(
+  /**
+   * Agent mode mirrors Plan mode exactly, but skips the user-approval gate.
+   * The plan is generated, then immediately approved and executed.
+   * This gives the same rich PlanBlock UI without requiring human sign-off.
+   */
+  async function runAgentMode(
     sessionId: string,
     userContent: string,
     precedingMessages: ChatMessage[],
+    baseSystemPrompt: string,
   ): Promise<void> {
     // Step 1: add a placeholder plan message
     const planMsgId = generateId();
@@ -198,8 +220,106 @@ export function useChatGeneration(
     chatStore.addMessage(sessionId, planMsg);
     scrollToBottom(true);
 
-    // Step 2: generate the plan
-    const { plan, error: planError } = await planning.generatePlan(userContent);
+    // Step 2: stream-generate the plan with live PlanBlock updates
+    const { plan, error: planError } = await planning.generatePlan(
+      userContent,
+      baseSystemPrompt,
+      (partial) => {
+        const partialPlan = parseMarkdownPlan(partial, true);
+        if (partialPlan) {
+          chatStore.updateMessage(sessionId, planMsgId, {
+            agentPlan: partialPlan,
+            isStreaming: true,
+          });
+        }
+        scrollToBottom(false);
+      },
+    );
+
+    if (planError || !plan) {
+      chatStore.updateMessage(sessionId, planMsgId, {
+        content: planError ?? "Failed to generate plan.",
+        isStreaming: false,
+        error: planError ?? "Failed to generate plan.",
+      });
+      generationError.value = planError ?? "Failed to generate plan.";
+      return;
+    }
+
+    // Step 3: show the finalized plan
+    chatStore.updateMessage(sessionId, planMsgId, {
+      content: "",
+      agentPlan: plan,
+      isStreaming: false,
+    });
+    scrollToBottom(true);
+
+    // Step 4: AUTO-APPROVE (no user confirmation gate)
+    //   waitForApproval registers the plan as pending; immediate approvePlan
+    //   resolves it so execution starts without any user interaction.
+    planningStore.waitForApproval(plan); // registers in store (returns promise we don't await)
+    planningStore.approvePlan(plan.id); // immediately resolves it
+
+    // Step 5: execute via orchestrator
+    scrollToBottom(true);
+    const result = await orchestrator.execute(
+      plan,
+      precedingMessages,
+      baseSystemPrompt,
+    );
+
+    // Step 6: add final summary
+    const summaryId = generateId();
+    chatStore.addMessage(sessionId, {
+      id: summaryId,
+      role: "assistant",
+      content: result.summary || result.error || "Agent execution complete.",
+      isStreaming: false,
+      error: result.error ?? undefined,
+      createdAt: new Date().toISOString(),
+    });
+    scrollToBottom(true);
+  }
+
+  // ── Plan mode ──────────────────────────────────────────────
+
+  async function runPlanMode(
+    sessionId: string,
+    userContent: string,
+    precedingMessages: ChatMessage[],
+    baseSystemPrompt: string,
+  ): Promise<void> {
+    // Step 1: add a placeholder plan message
+    const planMsgId = generateId();
+    const planMsg: ChatMessage = {
+      id: planMsgId,
+      role: "plan",
+      content: "Generating plan…",
+      createdAt: new Date().toISOString(),
+      isStreaming: true,
+    };
+    chatStore.addMessage(sessionId, planMsg);
+    scrollToBottom(true);
+
+    // Step 2: generate the plan — parse partial markdown as it streams so
+    // PlanBlock renders live cards instead of unstyled text.
+    const { plan, error: planError } = await planning.generatePlan(
+      userContent,
+      baseSystemPrompt,
+      (partial) => {
+        // Use stable IDs (streaming=true) so Vue's v-for keying never flickers
+        const partialPlan = parseMarkdownPlan(partial, true);
+        if (partialPlan) {
+          // At least one ## task visible: show the live PlanBlock
+          chatStore.updateMessage(sessionId, planMsgId, {
+            agentPlan: partialPlan,
+            isStreaming: true,
+          });
+        }
+        // Before first ##: message stays as isStreaming=true (dots already shown)
+        scrollToBottom(false);
+      },
+    );
 
     if (planError || !plan) {
       chatStore.updateMessage(sessionId, planMsgId, {
@@ -235,7 +355,11 @@ export function useChatGeneration(
 
     // Step 5: execute via orchestrator
     scrollToBottom(true);
-    const result = await orchestrator.execute(plan, precedingMessages);
+    const result = await orchestrator.execute(
+      plan,
+      precedingMessages,
+      baseSystemPrompt,
+    );
 
     // Step 6: add final summary
     const summaryId = generateId();
@@ -281,16 +405,40 @@ export function useChatGeneration(
     };
     chatStore.addMessage(sessionId, userMsg);
 
+    // Resolve the effective base system prompt (session override > global)
+    const session = chatStore.activeSession;
+    const baseSystemPrompt =
+      session?.systemPrompt || settingsStore.settings.systemPrompt || "";
+
     // ── Plan mode: decompose → approve → execute ─────────────
     if (effectiveMode === "plan") {
       const precedingMessages = [
         ...chatStore.activeSession!.messages.filter((m) => !m.isStreaming),
       ];
-      await runPlanMode(sessionId, content, precedingMessages);
+      await runPlanMode(
+        sessionId,
+        content,
+        precedingMessages,
+        baseSystemPrompt,
+      );
       return;
     }
 
-    // ── Ask / Agent mode: single generate call ────────────────
+    // ── Agent mode: orchestrated with auto-approval ───────────
+    if (effectiveMode === "agent") {
+      const precedingMessages = [
+        ...chatStore.activeSession!.messages.filter((m) => !m.isStreaming),
+      ];
+      await runAgentMode(
+        sessionId,
+        content,
+        precedingMessages,
+        baseSystemPrompt,
+      );
+      return;
+    }
+
+    // ── Ask mode: single generate call ────────────────────────
     const assistantId = generateId();
     chatStore.addMessage(sessionId, {
       id: assistantId,

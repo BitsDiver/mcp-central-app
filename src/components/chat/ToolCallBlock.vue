@@ -2,88 +2,87 @@
   import { ref, computed } from 'vue';
   import type { ChatToolCall } from '@/types';
 
-  const props = defineProps<{
-    toolCall: ChatToolCall;
-  }>();
+  const props = defineProps<{ toolCall: ChatToolCall; }>();
 
   const expanded = ref(false);
 
-  const statusClass = computed(() => {
-    switch (props.toolCall.status) {
-      case 'success': return 'badge-success';
-      case 'error': return 'badge-danger';
-      case 'running': return 'badge-warning';
-      default: return 'badge-neutral';
-    }
+  const statusInfo = computed(() => {
+    const s = props.toolCall.status;
+    const map = {
+      pending: { label: 'Pending', cls: 'node--pending' },
+      running: { label: 'Running', cls: 'node--running' },
+      success: { label: 'Done', cls: 'node--success' },
+      error: { label: 'Error', cls: 'node--error' },
+    } as const;
+    return map[s as keyof typeof map] ?? map.pending;
   });
 
-  const statusLabel = computed(() => {
-    switch (props.toolCall.status) {
-      case 'success': return 'Done';
-      case 'error': return 'Error';
-      case 'running': return 'Running...';
-      default: return 'Pending';
+  const argsText = computed(() => {
+    if (!props.toolCall.args) return '{}';
+    // Always pretty-print; args should already be an object but guard anyway.
+    try {
+      return typeof props.toolCall.args === 'string'
+        ? JSON.stringify(JSON.parse(props.toolCall.args), null, 2)
+        : JSON.stringify(props.toolCall.args, null, 2);
+    } catch {
+      return String(props.toolCall.args);
     }
   });
-
-  const argsText = computed(() =>
-    props.toolCall.args ? JSON.stringify(props.toolCall.args, null, 2) : '{}',
-  );
 
   const resultText = computed(() => {
     if (props.toolCall.error) return props.toolCall.error;
     if (props.toolCall.result === undefined) return null;
-    if (typeof props.toolCall.result === 'string') return props.toolCall.result;
+    if (typeof props.toolCall.result === 'string') {
+      // Try to parse + re-indent strings that happen to be JSON.
+      try { return JSON.stringify(JSON.parse(props.toolCall.result), null, 2); } catch { /* not JSON */ }
+      return props.toolCall.result;
+    }
     return JSON.stringify(props.toolCall.result, null, 2);
   });
 
-  // ── Copy helpers ──────────────────────────────────────────────
   const copiedArgs = ref(false);
   const copiedResult = ref(false);
 
   async function copyToClipboard(text: string, flag: 'args' | 'result') {
     try {
       await navigator.clipboard.writeText(text);
-      if (flag === 'args') { copiedArgs.value = true; setTimeout(() => copiedArgs.value = false, 1500); }
-      else { copiedResult.value = true; setTimeout(() => copiedResult.value = false, 1500); }
+      if (flag === 'args') { copiedArgs.value = true; setTimeout(() => (copiedArgs.value = false), 1500); }
+      else { copiedResult.value = true; setTimeout(() => (copiedResult.value = false), 1500); }
     } catch { /* clipboard blocked */ }
   }
 </script>
 
 <template>
-  <div class="tool-call-block">
-    <button type="button" class="tool-call-header" @click="expanded = !expanded">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path
-          d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"
-          stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-      <span class="tool-name">{{ toolCall.name }}</span>
-      <span :class="['badge', statusClass, 'ml-auto']">
-        <span v-if="toolCall.status === 'running'" class="inline-flex gap-1 items-center">
-          <span class="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin-smooth" />
-          {{ statusLabel }}
-        </span>
-        <span v-else>{{ statusLabel }}</span>
-      </span>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-        :style="{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }">
+  <!-- Timeline node wrapper -->
+  <div :class="['tool-node', statusInfo.cls]">
+    <!-- Status dot (rail drawn by parent .tool-timeline via CSS) -->
+    <span class="tool-node-dot">
+      <span v-if="toolCall.status === 'running'" class="dot-spin" />
+    </span>
+
+    <!-- Header row -->
+    <button type="button" class="tool-node-header" @click="expanded = !expanded">
+      <span class="tool-node-name">{{ toolCall.name }}</span>
+      <span :class="['tool-node-status', statusInfo.cls]">{{ statusInfo.label }}</span>
+      <!-- Chevron -->
+      <svg class="tool-node-chevron" :class="{ 'tool-node-chevron--open': expanded }" width="11" height="11"
+        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
     </button>
 
-    <div v-if="expanded" class="tool-call-body">
+    <!-- Expanded body -->
+    <div v-if="expanded" class="tool-node-body">
       <!-- Arguments -->
       <div class="tool-section">
-        <div class="tool-section-header">
-          <p class="tool-section-label">Arguments</p>
+        <div class="tool-section-hdr">
+          <span class="tool-section-lbl">Arguments</span>
           <button type="button" class="copy-btn" title="Copy arguments" @click.stop="copyToClipboard(argsText, 'args')">
-            <!-- check icon when copied, clipboard otherwise -->
-            <svg v-if="copiedArgs" width="13" height="13" viewBox="0 0 24 24" fill="none"
+            <svg v-if="copiedArgs" width="12" height="12" viewBox="0 0 24 24" fill="none"
               stroke="var(--color-success-500)" stroke-width="2.5">
               <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
-            <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
               <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke-linecap="round"
                 stroke-linejoin="round" />
@@ -95,22 +94,22 @@
 
       <!-- Result / Error -->
       <div v-if="resultText !== null" class="tool-section">
-        <div class="tool-section-header">
-          <p class="tool-section-label">{{ toolCall.error ? 'Error' : 'Result' }}</p>
+        <div class="tool-section-hdr">
+          <span class="tool-section-lbl">{{ toolCall.error ? 'Error' : 'Result' }}</span>
           <button type="button" class="copy-btn" title="Copy result"
-            @click.stop="copyToClipboard(resultText, 'result')">
-            <svg v-if="copiedResult" width="13" height="13" viewBox="0 0 24 24" fill="none"
+            @click.stop="copyToClipboard(resultText!, 'result')">
+            <svg v-if="copiedResult" width="12" height="12" viewBox="0 0 24 24" fill="none"
               stroke="var(--color-success-500)" stroke-width="2.5">
               <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
-            <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
               <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke-linecap="round"
                 stroke-linejoin="round" />
             </svg>
           </button>
         </div>
-        <div v-if="toolCall.error" class="tool-error-text">{{ resultText }}</div>
+        <p v-if="toolCall.error" class="tool-error-text">{{ resultText }}</p>
         <pre v-else class="tool-code">{{ resultText }}</pre>
       </div>
     </div>
@@ -118,61 +117,172 @@
 </template>
 
 <style scoped>
-  .tool-call-block {
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-    margin-bottom: 6px;
-    background: var(--bg-muted);
+
+  /* ── Timeline node ─────────────────────────────────────────────── */
+  .tool-node {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding-left: 20px;
+    margin-bottom: 4px;
   }
 
-  .tool-call-header {
+  /* Vertical rail - parent ChatMessage wraps these in .tool-timeline */
+  .tool-node::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 16px;
+    bottom: -4px;
+    width: 1.5px;
+    background: var(--border-default);
+    border-radius: 1px;
+  }
+
+  .tool-node:last-child::before {
+    display: none;
+  }
+
+  /* Status dot */
+  .tool-node-dot {
+    position: absolute;
+    left: 0;
+    top: 7px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border-strong);
+    background: var(--bg-surface);
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
+    z-index: 1;
+  }
+
+  .node--pending .tool-node-dot {
+    background: var(--bg-muted);
+    border-color: var(--border-default);
+  }
+
+  .node--running .tool-node-dot {
+    border-color: var(--color-primary-400);
+    background: color-mix(in srgb, var(--color-primary-400) 15%, var(--bg-surface));
+  }
+
+  .node--success .tool-node-dot {
+    background: var(--color-success-500, #22c55e);
+    border-color: var(--color-success-500, #22c55e);
+  }
+
+  .node--error .tool-node-dot {
+    background: var(--color-danger-500);
+    border-color: var(--color-danger-500);
+  }
+
+  /* Spinning ring inside running dot */
+  .dot-spin {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    border: 1.5px solid var(--color-primary-400);
+    border-top-color: transparent;
+    animation: dot-rotate 0.7s linear infinite;
+  }
+
+  @keyframes dot-rotate {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* ── Header row ──────────────────────────────────────────────── */
+  .tool-node-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     width: 100%;
-    padding: 8px 10px;
     background: none;
     border: none;
     cursor: pointer;
-    color: var(--text-secondary);
     text-align: left;
-    transition: background-color 0.12s ease;
+    padding: 4px 6px 4px 2px;
+    border-radius: var(--radius-sm);
+    transition: background 0.1s ease;
   }
 
-  .tool-call-header:hover {
+  .tool-node-header:hover {
     background: var(--bg-hover);
   }
 
-  .tool-name {
+  .tool-node-name {
     font-size: 12px;
     font-weight: 600;
-    font-family: var(--font-mono);
+    font-family: var(--font-mono, monospace);
     color: var(--text-primary);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .tool-call-body {
-    border-top: 1px solid var(--border-default);
-    padding: 10px 12px;
+  /* Inline status label */
+  .tool-node-status {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+
+  .node--pending .tool-node-status {
+    color: var(--text-tertiary);
+  }
+
+  .node--running .tool-node-status {
+    color: var(--color-primary-500);
+  }
+
+  .node--success .tool-node-status {
+    color: var(--color-success-600, #16a34a);
+  }
+
+  .node--error .tool-node-status {
+    color: var(--color-danger-500);
+  }
+
+  /* Chevron */
+  .tool-node-chevron {
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+    transition: transform 0.15s ease;
+  }
+
+  .tool-node-chevron--open {
+    transform: rotate(90deg);
+  }
+
+  /* ── Body (args + result) ────────────────────────────────────── */
+  .tool-node-body {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
+    padding: 6px 4px 8px;
   }
 
-  .tool-section-header {
+  .tool-section-hdr {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 4px;
   }
 
-  .tool-section-label {
-    font-size: 11px;
+  .tool-section-lbl {
+    font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--text-tertiary);
-    margin: 0;
   }
 
   .copy-btn {
@@ -183,9 +293,9 @@
     border: none;
     cursor: pointer;
     padding: 2px;
-    border-radius: 4px;
+    border-radius: 3px;
     color: var(--text-tertiary);
-    transition: color 0.15s ease, background 0.15s ease;
+    transition: color 0.12s ease, background 0.12s ease;
   }
 
   .copy-btn:hover {
@@ -194,28 +304,33 @@
   }
 
   .tool-code {
-    font-family: var(--font-mono);
+    font-family: var(--font-mono, monospace);
     font-size: 11px;
     color: var(--text-secondary);
-    background: var(--bg-surface);
+    background: var(--bg-muted);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-sm);
-    padding: 8px;
+    padding: 7px 9px;
     margin: 0;
-    max-height: 160px;
+    /* Args: compact. Result can be huge — give it more room and always scroll. */
+    max-height: 240px;
     overflow-y: auto;
-    overflow-x: auto;
+    overflow-x: hidden;
     white-space: pre-wrap;
-    word-break: break-all;
+    word-break: break-word;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-default) transparent;
+  }
+
+  /* Wider result panel for potentially large payloads */
+  .tool-section:last-child .tool-code {
+    max-height: 320px;
   }
 
   .tool-error-text {
     font-size: 12px;
-    color: var(--color-danger-600);
-    font-family: var(--font-mono);
-  }
-
-  .tool-result-markdown {
-    font-size: 12px;
+    color: var(--color-danger-500);
+    font-family: var(--font-mono, monospace);
+    margin: 0;
   }
 </style>

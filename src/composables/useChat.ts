@@ -1,8 +1,9 @@
 import { ref, computed } from "vue";
 import type { ChatMessage, ChatToolCall, Tool } from "@/types";
 import { useChatSettingsStore } from "@/stores/chatSettings";
+import { useChatStore } from "@/stores/chat";
 import { useOllama } from "@/composables/useOllama";
-import { getSocket } from "@/api/socket";
+import { generateViaHttp, abortHttpGeneration } from "@/api/chatTransport";
 
 // ── Shared generate opts interface (compatible with useOllama) ────────────────
 
@@ -28,41 +29,47 @@ export interface GenerateOpts {
 /**
  * useChat — Unified chat composable that dispatches to the correct provider.
  *
- * - provider === "ollama"  → direct browser call via useOllama (unchanged path)
- * - provider !== "ollama"  → Socket.IO /chat namespace, streaming events from backend
+ * - provider === "ollama" && ollamaPath === "browser"
+ *     → direct browser call via useOllama (unchanged)
+ * - everything else (all backend providers + ollama with ollamaPath === "backend")
+ *     → POST /api/chat  HTTP SSE via chatTransport.generateViaHttp()
  *
- * The generate() signature is 100% compatible with the old useOllama signature
- * so ChatView requires only a minimal change (import swap + isConfigured update).
+ * The generate() signature is 100% compatible with the old useOllama signature.
  */
 export function useChat() {
   const settingsStore = useChatSettingsStore();
+  const chatStore = useChatStore();
   const ollama = useOllama();
-  const _socketGenerating = ref(false);
+  const _httpGenerating = ref(false);
 
-  /** True while any generation is in progress (Ollama or socket) */
-  const isGenerating = computed(() =>
-    settingsStore.settings.provider === "ollama"
+  /** True while any generation is in progress */
+  const isGenerating = computed(() => {
+    const p = settingsStore.settings.provider;
+    const path = settingsStore.settings.ollamaPath ?? "browser";
+    return p === "ollama" && path === "browser"
       ? ollama.isGenerating.value
-      : _socketGenerating.value,
-  );
+      : _httpGenerating.value;
+  });
 
   /** Abort the active generation */
   function stop() {
-    const provider = settingsStore.settings.provider;
-    if (provider === "ollama") {
+    const p = settingsStore.settings.provider;
+    const path = settingsStore.settings.ollamaPath ?? "browser";
+    if (p === "ollama" && path === "browser") {
       ollama.stop();
     } else {
-      _socketGenerating.value = false;
-      const socket = getSocket("chat");
-      socket?.emit("stopGeneration", {});
+      abortHttpGeneration();
+      _httpGenerating.value = false;
     }
   }
 
   /** Dispatch generation to the active provider */
   async function generate(opts: GenerateOpts): Promise<void> {
     const provider = settingsStore.settings.provider;
+    const ollamaPath = settingsStore.settings.ollamaPath ?? "browser";
 
-    if (provider === "ollama") {
+    // Ollama browser-direct path (existing, unchanged)
+    if (provider === "ollama" && ollamaPath === "browser") {
       return ollama.generate({
         ollamaUrl: opts.ollamaUrl ?? settingsStore.settings.ollamaUrl,
         ollamaApiKey:
@@ -82,133 +89,39 @@ export function useChat() {
       });
     }
 
-    return generateViaSocket(provider, opts);
+    // HTTP SSE path — all backend providers + ollama-backend
+    return generateViaBackend(provider, opts);
   }
 
-  // ── Socket-based generation ────────────────────────────────────────────────
-
-  async function generateViaSocket(
+  async function generateViaBackend(
     provider: string,
     opts: GenerateOpts,
   ): Promise<void> {
-    const socket = getSocket("chat");
-    if (!socket?.connected) {
-      opts.onError("Chat socket not connected. Please refresh the page.");
-      return;
-    }
+    _httpGenerating.value = true;
+    const tenantId = chatStore.activeSession?.tenantId ?? null;
+    const ollamaUrl =
+      provider === "ollama" ? settingsStore.settings.ollamaUrl : undefined;
 
-    _socketGenerating.value = true;
-
-    // Track pending tool calls so we can match start → done events
-    const pendingToolCalls = new Map<string, ChatToolCall>();
-
-    return new Promise<void>((resolve) => {
-      // ── Event listeners ──────────────────────────────────────────────────
-
-      function onToken({
-        content,
-        thinking,
-      }: {
-        content: string;
-        thinking?: string;
-      }) {
-        if (!_socketGenerating.value) return;
-        opts.onToken(content, thinking ?? "");
-      }
-
-      function onToolStart({
-        id,
-        name,
-        args,
-      }: {
-        id: string;
-        name: string;
-        args: Record<string, unknown>;
-      }) {
-        if (!_socketGenerating.value) return;
-        const tc: ChatToolCall = { id, name, args, status: "running" };
-        pendingToolCalls.set(id, tc);
-        opts.onToolCall(tc).catch(() => {});
-      }
-
-      function onToolDone({
-        id,
-        name,
-        result,
-        error,
-        status,
-      }: {
-        id: string;
-        name: string;
-        result?: unknown;
-        error?: string;
-        status: "success" | "error";
-      }) {
-        if (!_socketGenerating.value) return;
-        const pending = pendingToolCalls.get(id);
-        pendingToolCalls.delete(id);
-        const tc: ChatToolCall = {
-          id,
-          name: name || pending?.name || "",
-          args: pending?.args ?? {},
-          result,
-          error,
-          status,
-        };
-        opts.onToolCall(tc).catch(() => {});
-      }
-
-      function onDone({
-        content,
-        thinking,
-        usage,
-      }: {
-        content: string;
-        thinking?: string;
-        usage?: { promptTokens: number; completionTokens: number };
-      }) {
-        cleanup();
-        opts.onDone(content, thinking ?? "");
-        if (usage && opts.onUsage) {
-          opts.onUsage(usage.promptTokens + usage.completionTokens);
-        }
-        _socketGenerating.value = false;
-        resolve();
-      }
-
-      function onError({ message }: { message: string }) {
-        cleanup();
-        opts.onError(message);
-        _socketGenerating.value = false;
-        resolve();
-      }
-
-      function cleanup() {
-        if (!socket) return;
-        socket.off("chat:token", onToken);
-        socket.off("chat:tool_start", onToolStart);
-        socket.off("chat:tool_done", onToolDone);
-        socket.off("chat:done", onDone);
-        socket.off("chat:error", onError);
-      }
-
-      socket.on("chat:token", onToken);
-      socket.on("chat:tool_start", onToolStart);
-      socket.on("chat:tool_done", onToolDone);
-      socket.on("chat:done", onDone);
-      socket.on("chat:error", onError);
-
-      // Emit the chat request to the backend
-      socket.emit("chat", {
+    try {
+      await generateViaHttp({
         provider,
         model: opts.model ?? settingsStore.settings.selectedModel,
         messages: opts.messages,
-        systemPrompt: opts.systemPrompt,
-        contextSize: opts.contextSize ?? settingsStore.settings.contextSize,
+        tenantId,
+        systemPrompt:
+          opts.systemPrompt ?? settingsStore.settings.systemPrompt ?? undefined,
         maxIterations:
           opts.maxIterations ?? settingsStore.settings.maxIterations,
+        ollamaUrl,
+        onToken: opts.onToken,
+        onToolCall: opts.onToolCall,
+        onDone: opts.onDone,
+        onError: opts.onError,
+        onUsage: opts.onUsage,
       });
-    });
+    } finally {
+      _httpGenerating.value = false;
+    }
   }
 
   return { isGenerating, generate, stop };

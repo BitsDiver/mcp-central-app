@@ -1,57 +1,88 @@
 <script setup lang="ts">
-  import { ref } from 'vue';
+  import { ref, watch } from 'vue';
   import { renderMarkdown } from '@/composables/useMarkdown';
 
-  defineProps<{
+  const props = defineProps<{
     content: string;
+    isStreaming?: boolean;
   }>();
 
+  // Auto-expand as soon as content starts arriving or streaming begins.
+  // The user can still collapse manually; once collapsed we stop auto-re-opening.
   const expanded = ref(false);
+  const userCollapsed = ref(false);
+
+  watch(
+    () => [props.isStreaming, props.content] as const,
+    ([streaming, content]) => {
+      if (!userCollapsed.value && (streaming || content)) {
+        expanded.value = true;
+      }
+    },
+    { immediate: true },
+  );
+
+  function toggle() {
+    expanded.value = !expanded.value;
+    // Track if the user explicitly collapsed so we stop auto-reopening.
+    if (!expanded.value) userCollapsed.value = true;
+    else userCollapsed.value = false;
+  }
 </script>
 
 <template>
-  <div class="thinking-block" :class="{ 'thinking-expanded': expanded }">
-    <button type="button" class="thinking-toggle" @click="expanded = !expanded">
-      <svg class="thinking-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        stroke-width="2.5" :style="{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }">
-        <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
+  <div class="thinking-block">
+    <button type="button" class="thinking-toggle" @click="toggle">
+      <!-- Sparkle / reasoning icon -->
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        class="thinking-icon" aria-hidden="true">
+        <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" stroke-linejoin="round" />
       </svg>
-      <span class="thinking-label">Thinking</span>
-      <span class="thinking-dots" v-if="!content">
+      <span class="thinking-label">Reasoning</span>
+      <!-- Animated dots while no content yet -->
+      <span v-if="!content" class="thinking-dots" aria-hidden="true">
         <span /><span /><span />
       </span>
+      <!-- Chevron -->
+      <svg class="thinking-chevron" :class="{ 'thinking-chevron--open': expanded }" width="11" height="11"
+        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
     </button>
-    <div v-if="expanded && content" class="thinking-content">
-      <div class="markdown-body thinking-markdown" v-html="renderMarkdown(content)" />
+
+    <div class="thinking-content" :class="{ 'thinking-content--visible': expanded }">
+      <!-- Live streaming: plain preformatted so re-renders are cheap -->
+      <pre v-if="isStreaming && content" class="thinking-pre">{{ content }}<span class="thinking-cursor" /></pre>
+      <!-- Finished: render as markdown -->
+      <div v-else-if="!isStreaming && content" class="markdown-body thinking-markdown"
+        v-html="renderMarkdown(content)" />
+      <!-- Empty placeholder while waiting for first token -->
+      <p v-else class="thinking-empty">Waiting for reasoning…</p>
     </div>
   </div>
 </template>
 
 <style scoped>
   .thinking-block {
-    border-left: 2px solid var(--border-default);
-    margin: 4px 0 8px 2px;
+    border-left: 2px solid;
+    border-image: linear-gradient(to bottom,
+        color-mix(in srgb, var(--color-primary-400) 60%, transparent),
+        color-mix(in srgb, var(--color-primary-400) 20%, transparent)) 1;
     padding-left: 0;
-    transition: border-color 0.15s ease;
-  }
-
-  .thinking-block.thinking-expanded {
-    border-color: color-mix(in srgb, var(--color-primary-500) 40%, var(--border-default));
+    margin: 2px 0 4px;
+    transition: border-color 0.2s ease;
   }
 
   .thinking-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 5px;
     padding: 3px 8px;
     background: none;
     border: none;
     cursor: pointer;
-    font-size: 11px;
-    font-weight: 500;
     color: var(--text-tertiary);
-    text-align: left;
-    transition: color 0.12s ease;
+    transition: color 0.12s ease, background 0.12s ease;
     border-radius: var(--radius-sm);
   }
 
@@ -60,16 +91,28 @@
     background: var(--bg-hover);
   }
 
-  .thinking-chevron {
+  .thinking-icon {
     flex-shrink: 0;
-    transition: transform 0.15s ease;
+    color: var(--color-primary-400);
   }
 
   .thinking-label {
+    font-size: 11px;
+    font-weight: 500;
     font-style: italic;
     letter-spacing: 0.01em;
   }
 
+  .thinking-chevron {
+    flex-shrink: 0;
+    transition: transform 0.18s ease;
+  }
+
+  .thinking-chevron--open {
+    transform: rotate(90deg);
+  }
+
+  /* Animated dots */
   .thinking-dots {
     display: inline-flex;
     gap: 2px;
@@ -82,7 +125,7 @@
     height: 3px;
     border-radius: 50%;
     background: currentColor;
-    animation: pulse 1.4s ease-in-out infinite;
+    animation: dot-pulse 1.4s ease-in-out infinite;
   }
 
   .thinking-dots span:nth-child(2) {
@@ -93,7 +136,7 @@
     animation-delay: 0.4s;
   }
 
-  @keyframes pulse {
+  @keyframes dot-pulse {
 
     0%,
     80%,
@@ -106,8 +149,15 @@
     }
   }
 
+  /* Content panel — animates open */
   .thinking-content {
-    padding: 6px 12px 8px;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+  }
+
+  .thinking-content--visible {
+    max-height: 600px;
   }
 
   .thinking-markdown {
@@ -115,6 +165,7 @@
     font-style: italic;
     color: var(--text-tertiary);
     line-height: 1.6;
+    padding: 5px 10px 8px;
   }
 
   .thinking-markdown :deep(p) {

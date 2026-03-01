@@ -41,6 +41,7 @@ function loadFromStorage(): ChatSettings {
       return {
         ollamaUrl: parsed.ollamaUrl ?? "http://localhost:11434",
         ollamaApiKey: parsed.ollamaApiKey ?? "",
+        ollamaPath: parsed.ollamaPath ?? "browser",
         selectedModel: parsed.selectedModel ?? "",
         contextSize: parsed.contextSize ?? 8192,
         systemPrompt: parsed.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
@@ -54,6 +55,7 @@ function loadFromStorage(): ChatSettings {
   return {
     ollamaUrl: "http://localhost:11434",
     ollamaApiKey: "",
+    ollamaPath: "browser" as const,
     selectedModel: "",
     contextSize: 8192,
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
@@ -224,6 +226,7 @@ export const useChatSettingsStore = defineStore("chatSettings", () => {
       systemPrompt: string;
       ollamaUrl?: string;
       ollamaApiKey?: string;
+      ollamaPath?: "browser" | "backend";
       maxIterations?: number;
     },
   ): void {
@@ -245,6 +248,9 @@ export const useChatSettingsStore = defineStore("chatSettings", () => {
         : {}),
       ...(config.ollamaApiKey !== undefined
         ? { ollamaApiKey: config.ollamaApiKey }
+        : {}),
+      ...(config.ollamaPath !== undefined
+        ? { ollamaPath: config.ollamaPath }
         : {}),
       ...(config.maxIterations !== undefined
         ? { maxIterations: config.maxIterations }

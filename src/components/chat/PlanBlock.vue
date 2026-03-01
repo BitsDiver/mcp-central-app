@@ -1,9 +1,11 @@
 <script setup lang="ts">
-    import { ref, computed } from 'vue';
+    import { ref, computed, nextTick } from 'vue';
     import { useAgentPlanningStore } from '@/stores/agentPlanning';
-    import type { AgentPlan, AgentTask, AgentTaskStatus } from '@/types';
+    import { renderMarkdown } from '@/composables/useMarkdown';
+    import ToolCallBlock from '@/components/chat/ToolCallBlock.vue';
+    import type { AgentPlan, AgentTask, AgentTaskStatus, ChatToolCall } from '@/types';
 
-    const props = defineProps<{ plan: AgentPlan; }>();
+    const props = defineProps<{ plan: AgentPlan; isStreaming?: boolean; }>();
 
     const planningStore = useAgentPlanningStore();
 
@@ -14,11 +16,19 @@
             : props.plan,
     );
 
-    const isPending = computed(() => livePlan.value.status === 'pending');
+    const isPending = computed(() => livePlan.value.status === 'pending' && !props.isStreaming);
     const isRunning = computed(() => livePlan.value.status === 'running');
 
+    /** Last task card currently being written during streaming */
+    const lastStreamingTask = computed<AgentTask | null>(() => {
+        if (!props.isStreaming) return null;
+        const groups = livePlan.value.parallelGroups;
+        if (!groups.length) return null;
+        const lastGroup = groups[groups.length - 1];
+        return lastGroup.length ? lastGroup[lastGroup.length - 1] : null;
+    });
 
-    // ── Inline editing ────────────────────────────────────────────────────────
+    // ── Inline editing ───────────────────────────────────────────
     const editingTaskId = ref<string | null>(null);
     const editName = ref('');
     const editDesc = ref('');
@@ -35,35 +45,71 @@
         editingTaskId.value = null;
     }
 
-    function cancelEdit() {
-        editingTaskId.value = null;
+    function cancelEdit() { editingTaskId.value = null; }
+
+    // ── Title editing ─────────────────────────────────────────
+    const editingTitle = ref(false);
+    const editTitleText = ref('');
+
+    function startTitleEdit() {
+        if (!isPending.value) return;
+        editTitleText.value = livePlan.value.title;
+        editingTitle.value = true;
     }
 
-    // ── Expandable results ────────────────────────────────────────────────────
+    function commitTitleEdit() {
+        const trimmed = editTitleText.value.trim();
+        if (trimmed) planningStore.editTitle(livePlan.value.id, trimmed);
+        editingTitle.value = false;
+    }
+
+    function cancelTitleEdit() { editingTitle.value = false; }
+
+    // ── Task add / remove / reorder ───────────────────────────
+    function groupIndexOf(taskId: string): number {
+        return livePlan.value.parallelGroups.findIndex(g => g.some(t => t.id === taskId));
+    }
+
+    function handleAddTask() {
+        const newId = planningStore.addTask(livePlan.value.id);
+        if (!newId) return;
+        nextTick(() => {
+            const newTask = livePlan.value.parallelGroups.flat().find(t => t.id === newId);
+            if (newTask) startEdit(newTask);
+        });
+    }
+
+    function handleRemoveTask(taskId: string) {
+        planningStore.removeTask(livePlan.value.id, taskId);
+        if (editingTaskId.value === taskId) editingTaskId.value = null;
+    }
+
+    function handleMoveUp(taskId: string) {
+        const gi = groupIndexOf(taskId);
+        if (gi > 0) planningStore.moveGroup(livePlan.value.id, gi, 'up');
+    }
+
+    function handleMoveDown(taskId: string) {
+        const gi = groupIndexOf(taskId);
+        if (gi >= 0 && gi < livePlan.value.parallelGroups.length - 1)
+            planningStore.moveGroup(livePlan.value.id, gi, 'down');
+    }
+
+    // ── Expandable results ───────────────────────────────────────
     const expandedTaskIds = ref<Set<string>>(new Set());
 
     function toggleExpand(taskId: string) {
-        if (expandedTaskIds.value.has(taskId))
-            expandedTaskIds.value.delete(taskId);
-        else
-            expandedTaskIds.value.add(taskId);
+        if (expandedTaskIds.value.has(taskId)) expandedTaskIds.value.delete(taskId);
+        else expandedTaskIds.value.add(taskId);
     }
 
-    // ── Status helpers ────────────────────────────────────────────────────────
-    const STATUS_ICONS: Record<AgentTaskStatus, string> = {
-        pending: '○',
-        running: '◌',
-        success: '✓',
-        error: '✕',
-        skipped: '–',
-    };
-
-    const STATUS_CLASSES: Record<AgentTaskStatus, string> = {
-        pending: 'status--pending',
-        running: 'status--running',
-        success: 'status--success',
-        error: 'status--error',
-        skipped: 'status--skipped',
+    // ── Status helpers ───────────────────────────────────────────
+    const STATUS_LABELS: Record<AgentTaskStatus, string> = {
+        pending: 'Pending',
+        running: 'Running',
+        success: 'Done',
+        error: 'Error',
+        skipped: 'Skipped',
     };
 
     function taskStatus(task: AgentTask): AgentTaskStatus {
@@ -83,92 +129,187 @@
         }
         return task.result;
     }
+
+    // ── Expandable tool calls per task ───────────────────────
+    const expandedToolsIds = ref<Set<string>>(new Set());
+
+    function toggleToolsExpand(taskId: string) {
+        if (expandedToolsIds.value.has(taskId)) expandedToolsIds.value.delete(taskId);
+        else expandedToolsIds.value.add(taskId);
+    }
+
+    function taskToolCalls(task: AgentTask): ChatToolCall[] {
+        if (!livePlan.value) return task.toolCalls ?? [];
+        for (const g of livePlan.value.parallelGroups) {
+            const live = g.find(t => t.id === task.id);
+            if (live) return live.toolCalls ?? [];
+        }
+        return task.toolCalls ?? [];
+    }
 </script>
 
 <template>
     <div class="plan-block">
-        <!-- Header -->
+        <!-- Header ──────────────────────────────────────────────── -->
         <div class="plan-header">
-            <span class="plan-icon">⚡</span>
-            <span class="plan-title">{{ livePlan.title }}</span>
-            <span :class="['plan-status-badge', `badge--${livePlan.status}`]">
-                {{ livePlan.status }}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                class="plan-icon" aria-hidden="true">
+                <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <!-- Editable title (pending only) -->
+            <input v-if="editingTitle" ref="titleInput" v-model="editTitleText" class="plan-title-input"
+                @blur="commitTitleEdit" @keydown.enter="commitTitleEdit" @keydown.escape="cancelTitleEdit" />
+            <span v-else class="plan-title" :class="{ 'plan-title--editable': isPending }" @click="startTitleEdit">{{
+                livePlan.title }}</span>
+            <span
+                :class="['plan-badge', props.isStreaming ? 'plan-badge--generating' : `plan-badge--${livePlan.status}`]">
+                {{ props.isStreaming ? 'generating' : livePlan.status }}
             </span>
         </div>
 
-        <!-- Parallel groups -->
-        <div class="groups-list">
+        <!-- Task groups ─────────────────────────────────────────── -->
+        <div class="groups-area">
             <div v-for="(group, gi) in livePlan.parallelGroups" :key="gi" class="task-group">
-                <div v-if="livePlan.parallelGroups.length > 1" class="group-label">
-                    Group {{ gi + 1 }}
-                    <span v-if="group.length > 1" class="parallel-hint">(parallel)</span>
+                <!-- Group divider (only when multiple groups) -->
+                <div v-if="livePlan.parallelGroups.length > 1" class="group-divider">
+                    <hr class="group-hr" />
+                    <span class="group-label">
+                        Group {{ gi + 1 }}
+                        <span v-if="group.length > 1">&nbsp;· parallel</span>
+                    </span>
+                    <hr class="group-hr" />
                 </div>
 
-                <div v-for="task in group" :key="task.id" class="task-row">
-                    <!-- Status icon -->
-                    <span :class="['task-status', STATUS_CLASSES[taskStatus(task)]]">
-                        {{ STATUS_ICONS[taskStatus(task)] }}
-                    </span>
+                <!-- Task cards -->
+                <div v-for="task in group" :key="task.id"
+                    :class="['task-card', `task-card--${taskStatus(task)}`,
+                        { 'task-card--shimmer': taskStatus(task) === 'running' || (props.isStreaming && task.id === lastStreamingTask?.id) }]">
+                    <!-- Status dot + label row -->
+                    <div class="task-meta">
+                        <span :class="['status-dot', `dot--${taskStatus(task)}`]">
+                            <span v-if="taskStatus(task) === 'running'" class="dot-ring" />
+                        </span>
+                        <span :class="['status-chip', `chip--${taskStatus(task)}`]">
+                            {{ STATUS_LABELS[taskStatus(task)] }}
+                        </span>
 
-                    <!-- Task content -->
-                    <div class="task-body">
-                        <!-- Edit mode -->
-                        <template v-if="editingTaskId === task.id">
-                            <input v-model="editName" class="edit-input edit-name" placeholder="Task name"
-                                @keydown.enter="commitEdit(livePlan.id, task.id)" @keydown.escape="cancelEdit" />
-                            <textarea v-model="editDesc" class="edit-input edit-desc" rows="3"
-                                placeholder="Task description" />
-                            <div class="edit-actions">
-                                <button class="btn-small btn-primary"
-                                    @click="commitEdit(livePlan.id, task.id)">Save</button>
-                                <button class="btn-small btn-ghost" @click="cancelEdit">Cancel</button>
-                            </div>
-                        </template>
-
-                        <!-- View mode -->
-                        <template v-else>
-                            <p class="task-name" :class="{ 'task-name--editable': isPending }" @click="startEdit(task)">
-                                {{ task.name }}
-                                <svg v-if="isPending" width="10" height="10" viewBox="0 0 24 24" fill="none"
-                                    stroke="currentColor" stroke-width="2" class="edit-hint">
-                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
-                                        stroke-linecap="round" />
-                                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
-                                        stroke-linecap="round" />
-                                </svg>
-                            </p>
-                            <p class="task-desc">{{ task.description }}</p>
-
-                            <!-- Result (when available) -->
-                            <div v-if="taskResult(task)" class="task-result-area">
-                                <button class="result-toggle" @click="toggleExpand(task.id)">
-                                    <svg :class="['chevron', { 'chevron--open': expandedTaskIds.has(task.id) }]"
-                                        width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2.5">
-                                        <polyline points="6 9 12 15 18 9" stroke-linecap="round" />
-                                    </svg>
-                                    {{ expandedTaskIds.has(task.id) ? 'Hide result' : 'Show result' }}
-                                </button>
-                                <div v-if="expandedTaskIds.has(task.id)" class="task-result">
-                                    <span v-if="taskStatus(task) === 'running'" class="streaming-cursor" />
-                                    {{ taskResult(task) }}
-                                </div>
-                            </div>
-                        </template>
+                        <!-- Edit pencil (pending only) -->
+                        <button v-if="isPending && editingTaskId !== task.id" type="button" class="meta-btn"
+                            title="Edit task" @click="startEdit(task)">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
+                                    stroke-linecap="round" />
+                                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
+                                    stroke-linecap="round" />
+                            </svg>
+                        </button>
+                        <!-- Move up -->
+                        <button v-if="isPending" type="button" class="meta-btn" :disabled="groupIndexOf(task.id) === 0"
+                            title="Move up" @click="handleMoveUp(task.id)">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2.5">
+                                <polyline points="18 15 12 9 6 15" stroke-linecap="round" />
+                            </svg>
+                        </button>
+                        <!-- Move down -->
+                        <button v-if="isPending" type="button" class="meta-btn"
+                            :disabled="groupIndexOf(task.id) === livePlan.parallelGroups.length - 1" title="Move down"
+                            @click="handleMoveDown(task.id)">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2.5">
+                                <polyline points="6 9 12 15 18 9" stroke-linecap="round" />
+                            </svg>
+                        </button>
+                        <!-- Delete task -->
+                        <button v-if="isPending" type="button" class="meta-btn meta-btn--danger" title="Remove task"
+                            @click="handleRemoveTask(task.id)">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="3 6 5 6 21 6" stroke-linecap="round" />
+                                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" stroke-linecap="round" />
+                                <path d="M10 11v6M14 11v6" stroke-linecap="round" />
+                            </svg>
+                        </button>
                     </div>
+
+                    <!-- Edit mode ───────────────────────────────── -->
+                    <template v-if="editingTaskId === task.id">
+                        <input v-model="editName" class="edit-input edit-name" placeholder="Task name"
+                            @keydown.enter="commitEdit(livePlan.id, task.id)" @keydown.escape="cancelEdit" />
+                        <textarea v-model="editDesc" class="edit-input edit-desc" rows="3"
+                            placeholder="Task description" />
+                        <div class="edit-actions">
+                            <button type="button" class="btn-sm btn-primary"
+                                @click="commitEdit(livePlan.id, task.id)">Save</button>
+                            <button type="button" class="btn-sm btn-ghost" @click="cancelEdit">Cancel</button>
+                        </div>
+                    </template>
+
+                    <!-- View mode ───────────────────────────────── -->
+                    <template v-else>
+                        <p class="task-name">
+                            {{ task.name }}<span
+                                v-if="props.isStreaming && task.id === lastStreamingTask?.id && !task.description"
+                                class="stream-cursor" />
+                        </p>
+                        <p v-if="task.description" class="task-desc markdown-body"
+                            v-html="renderMarkdown(task.description)" />
+
+                        <!-- Result toggleable area -->
+                        <div v-if="taskResult(task)" class="task-result-area">
+                            <button type="button" class="result-toggle" @click="toggleExpand(task.id)">
+                                <svg :class="['toggle-chevron', { 'toggle-chevron--open': expandedTaskIds.has(task.id) }]"
+                                    width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
+                                    <polyline points="6 9 12 15 18 9" stroke-linecap="round" />
+                                </svg>
+                                {{ expandedTaskIds.has(task.id) ? 'Hide result' : 'Show result' }}
+                            </button>
+                            <div v-if="expandedTaskIds.has(task.id)" class="task-result markdown-body"
+                                v-html="renderMarkdown(taskResult(task) ?? '')" />
+                        </div>
+
+                        <!-- Tool calls made during this task -->
+                        <div v-if="taskToolCalls(task).length" class="task-tools-area">
+                            <button type="button" class="result-toggle" @click="toggleToolsExpand(task.id)">
+                                <svg :class="['toggle-chevron', { 'toggle-chevron--open': expandedToolsIds.has(task.id) }]"
+                                    width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2.5">
+                                    <polyline points="6 9 12 15 18 9" stroke-linecap="round" />
+                                </svg>
+                                {{ taskToolCalls(task).length }}
+                                tool{{ taskToolCalls(task).length !== 1 ? 's' : '' }} used
+                            </button>
+                            <div v-if="expandedToolsIds.has(task.id)" class="task-tools-list">
+                                <ToolCallBlock v-for="tc in taskToolCalls(task)" :key="tc.id" :tool-call="tc" />
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </div>
         </div>
 
-        <!-- Approve / Reject footer (only when pending) -->
-        <div v-if="isPending" class="plan-actions">
-            <button class="btn-approve" @click="planningStore.approvePlan(livePlan.id)">
+        <!-- Add task button (pending only) ───────────────────── -->
+        <div v-if="isPending" class="add-task-row">
+            <button type="button" class="btn-add-task" @click="handleAddTask">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" />
+                    <line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" />
+                </svg>
+                Add task
+            </button>
+        </div>
+
+        <!-- Approve / Reject footer ─────────────────────────────── -->
+        <div v-if="isPending" class="plan-footer">
+            <button type="button" class="btn-approve" @click="planningStore.approvePlan(livePlan.id)">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <polyline points="20 6 9 17 4 12" stroke-linecap="round" />
                 </svg>
                 Approve &amp; Run
             </button>
-            <button class="btn-reject" @click="planningStore.rejectPlan(livePlan.id)">
+            <button type="button" class="btn-reject" @click="planningStore.rejectPlan(livePlan.id)">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" />
                 </svg>
@@ -176,14 +317,23 @@
             </button>
         </div>
 
-        <!-- Running indicator -->
+        <!-- Generating footer ───────────────────────────────────── -->
+        <p v-else-if="props.isStreaming" class="running-hint">
+            <span class="mini-spinner" />
+            Generating plan…
+        </p>
+
+        <!-- Running hint ─────────────────────────────────────────── -->
         <p v-else-if="isRunning" class="running-hint">
-            <span class="spinner" /> Executing tasks…
+            <span class="mini-spinner" />
+            Executing tasks…
         </p>
     </div>
 </template>
 
 <style scoped>
+
+    /* ── Block container ────────────────────────────────────── */
     .plan-block {
         border: 1px solid var(--border-default);
         border-radius: var(--radius-lg);
@@ -193,18 +343,18 @@
         max-width: min(640px, 100%);
     }
 
-    /* Header */
+    /* ── Header ─────────────────────────────────────────────── */
     .plan-header {
         display: flex;
         align-items: center;
         gap: 7px;
-        padding: 10px 14px 8px;
+        padding: 10px 14px;
         border-bottom: 1px solid var(--border-default);
         background: var(--bg-muted);
     }
 
     .plan-icon {
-        font-size: 13px;
+        color: var(--color-primary-400);
         flex-shrink: 0;
     }
 
@@ -212,82 +362,80 @@
         flex: 1;
         font-weight: 600;
         color: var(--text-primary);
-        white-space: nowrap;
+        line-height: 1.4;
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
+        white-space: nowrap;
     }
 
-    .plan-status-badge {
+    .plan-title--editable {
+        cursor: pointer;
+        border-radius: var(--radius-sm);
+        padding: 1px 4px;
+        margin: -1px -4px;
+        transition: background 0.1s;
+    }
+
+    .plan-title--editable:hover {
+        background: var(--bg-hover);
+    }
+
+    .plan-title-input {
+        flex: 1;
+        font-weight: 600;
+        font-size: 13px;
+        color: var(--text-primary);
+        background: var(--bg-input);
+        border: 1px solid var(--border-focus);
+        border-radius: var(--radius-sm);
+        padding: 2px 6px;
+        outline: none;
+        font-family: inherit;
+        min-width: 0;
+    }
+
+    .plan-badge {
         font-size: 10px;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
-        padding: 1px 7px;
+        letter-spacing: 0.05em;
+        padding: 2px 7px;
         border-radius: var(--radius-full);
         flex-shrink: 0;
     }
 
-    .badge--pending {
-        background: var(--color-warning-50);
-        color: var(--color-warning-700);
-        border: 1px solid var(--color-warning-200);
+    .plan-badge--pending {
+        background: var(--bg-hover);
+        color: var(--text-tertiary);
     }
 
-    .badge--approved {
-        background: var(--color-primary-50);
-        color: var(--color-primary-700);
-        border: 1px solid var(--color-primary-200);
+    .plan-badge--generating {
+        background: color-mix(in srgb, var(--color-primary-500) 12%, transparent);
+        color: var(--color-primary-500);
     }
 
-    .badge--running {
-        background: var(--color-primary-50);
-        color: var(--color-primary-600);
-        border: 1px solid var(--color-primary-200);
+    .plan-badge--running {
+        background: color-mix(in srgb, var(--color-primary-500) 12%, transparent);
+        color: var(--color-primary-500);
     }
 
-    .badge--completed {
-        background: var(--color-success-50, #f0fdf4);
-        color: var(--color-success-700, #15803d);
-        border: 1px solid var(--color-success-200, #bbf7d0);
+    .plan-badge--success {
+        background: color-mix(in srgb, var(--color-success-500, #22c55e) 12%, transparent);
+        color: var(--color-success-600, #16a34a);
     }
 
-    .badge--rejected {
-        background: var(--color-danger-50);
-        color: var(--color-danger-700);
-        border: 1px solid var(--color-danger-200);
+    .plan-badge--error {
+        background: color-mix(in srgb, var(--color-danger-500) 12%, transparent);
+        color: var(--color-danger-500);
     }
 
-    [data-theme="dark"] .badge--pending {
-        background: rgba(245, 158, 11, 0.08);
-        color: var(--color-warning-400);
-        border-color: rgba(245, 158, 11, 0.2);
-    }
-
-    [data-theme="dark"] .badge--approved,
-    [data-theme="dark"] .badge--running {
-        background: rgba(59, 130, 246, 0.08);
-        color: var(--color-primary-400);
-        border-color: rgba(59, 130, 246, 0.2);
-    }
-
-    [data-theme="dark"] .badge--completed {
-        background: rgba(34, 197, 94, 0.08);
-        color: #4ade80;
-        border-color: rgba(34, 197, 94, 0.2);
-    }
-
-    [data-theme="dark"] .badge--rejected {
-        background: rgba(239, 68, 68, 0.08);
-        color: var(--color-danger-400);
-        border-color: rgba(239, 68, 68, 0.2);
-    }
-
-    /* Groups */
-    .groups-list {
-        padding: 10px 14px;
+    /* ── Groups area ─────────────────────────────────────────── */
+    .groups-area {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 0;
+        padding: 12px;
     }
 
     .task-group {
@@ -296,182 +444,391 @@
         gap: 6px;
     }
 
+    /* Group divider */
+    .group-divider {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 4px 0 8px;
+    }
+
+    .group-hr {
+        flex: 1;
+        border: none;
+        border-top: 1px solid var(--border-default);
+        margin: 0;
+    }
+
     .group-label {
         font-size: 10px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.06em;
         color: var(--text-tertiary);
-    }
-
-    .parallel-hint {
-        font-weight: 400;
-        text-transform: none;
-        margin-left: 4px;
-    }
-
-    /* Tasks */
-    .task-row {
-        display: flex;
-        gap: 8px;
-        align-items: flex-start;
-    }
-
-    .task-status {
-        font-size: 13px;
-        line-height: 1.6;
+        white-space: nowrap;
         flex-shrink: 0;
-        width: 16px;
-        text-align: center;
     }
 
-    .status--pending {
-        color: var(--text-tertiary);
+    /* ── Task card ───────────────────────────────────────────── */
+    .task-card {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        padding: 9px 11px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-default);
+        border-left-width: 3px;
+        background: var(--bg-base);
+        transition: border-color 0.2s ease, background 0.2s ease;
     }
 
-    .status--running {
-        color: var(--color-primary-500);
-        animation: spin-pulse 1s ease-in-out infinite;
+    .task-card--pending {
+        border-left-color: var(--border-default);
     }
 
-    .status--success {
-        color: var(--color-success-600, #16a34a);
+    .task-card--running {
+        border-left-color: var(--color-primary-400);
     }
 
-    .status--error {
-        color: var(--color-danger-500);
+    .task-card--success {
+        border-left-color: var(--color-success-500, #22c55e);
     }
 
-    .status--skipped {
-        color: var(--text-tertiary);
+    .task-card--error {
+        border-left-color: var(--color-danger-500);
+    }
+
+    .task-card--skipped {
+        border-left-color: var(--border-default);
         opacity: 0.5;
     }
 
-    @keyframes spin-pulse {
+    /* Shimmer while running */
+    .task-card--shimmer {
+        background: linear-gradient(90deg,
+                var(--bg-base) 0%,
+                color-mix(in srgb, var(--color-primary-500) 5%, var(--bg-base)) 50%,
+                var(--bg-base) 100%);
+        background-size: 200% 100%;
+        animation: shimmer 2s linear infinite;
+    }
 
-        0%,
+    @keyframes shimmer {
+        from {
+            background-position: 200% 0;
+        }
+
+        to {
+            background-position: -200% 0;
+        }
+    }
+
+    /* Task meta row (status dot + chip + action btns) */
+    .task-meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    /* Status dot */
+    .status-dot {
+        position: relative;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .dot--pending {
+        background: var(--text-tertiary);
+        opacity: 0.35;
+    }
+
+    .dot--running {
+        background: var(--color-primary-400);
+    }
+
+    .dot--success {
+        background: var(--color-success-500, #22c55e);
+    }
+
+    .dot--error {
+        background: var(--color-danger-500);
+    }
+
+    .dot--skipped {
+        background: var(--text-tertiary);
+        opacity: 0.25;
+    }
+
+    .dot-ring {
+        position: absolute;
+        inset: -3px;
+        border-radius: 50%;
+        border: 1.5px solid var(--color-primary-400);
+        animation: ring-pulse 1.2s ease-out infinite;
+    }
+
+    @keyframes ring-pulse {
+        0% {
+            transform: scale(0.7);
+            opacity: 0.8;
+        }
+
         100% {
-            opacity: 1;
-        }
-
-        50% {
-            opacity: 0.35;
+            transform: scale(2);
+            opacity: 0;
         }
     }
 
-    .task-body {
-        flex: 1;
-        min-width: 0;
+    /* Status chip */
+    .status-chip {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
     }
 
+    .chip--pending {
+        color: var(--text-tertiary);
+    }
+
+    .chip--running {
+        color: var(--color-primary-500);
+    }
+
+    .chip--success {
+        color: var(--color-success-600, #16a34a);
+    }
+
+    .chip--error {
+        color: var(--color-danger-500);
+    }
+
+    .chip--skipped {
+        color: var(--text-tertiary);
+    }
+
+    /* Task action buttons (edit, move, delete) */
+    .meta-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 2px;
+        border-radius: 3px;
+        color: var(--text-tertiary);
+        transition: color 0.1s, background 0.1s;
+    }
+
+    .meta-btn:first-of-type {
+        margin-left: auto;
+    }
+
+    .meta-btn:hover:not(:disabled) {
+        color: var(--text-primary);
+        background: var(--bg-hover);
+    }
+
+    .meta-btn:disabled {
+        opacity: 0.25;
+        cursor: default;
+    }
+
+    .meta-btn--danger:hover:not(:disabled) {
+        color: var(--color-danger-500);
+        background: color-mix(in srgb, var(--color-danger-500) 8%, transparent);
+    }
+
+    /* Task name + description */
     .task-name {
+        margin: 0;
         font-weight: 600;
         color: var(--text-primary);
-        margin: 0;
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-    }
-
-    .task-name--editable {
-        cursor: pointer;
-    }
-
-    .task-name--editable:hover .edit-hint {
-        opacity: 1;
-    }
-
-    .edit-hint {
-        opacity: 0;
-        transition: opacity 0.12s ease;
-        flex-shrink: 0;
+        line-height: 1.4;
+        font-size: 13px;
     }
 
     .task-desc {
+        margin: 0;
         font-size: 12px;
         color: var(--text-secondary);
-        margin: 2px 0 0;
         line-height: 1.5;
     }
 
-    /* Inline editing */
-    .edit-input {
-        width: 100%;
-        border: 1px solid var(--border-focus);
-        border-radius: var(--radius-sm);
-        background: var(--bg-surface);
-        color: var(--text-primary);
-        padding: 4px 8px;
-        font-size: 13px;
-        outline: none;
-        box-sizing: border-box;
-        margin-bottom: 4px;
-        font-family: inherit;
+    .task-desc :deep(p) {
+        margin: 0 0 4px;
     }
 
-    .edit-desc {
+    .task-desc :deep(p:last-child) {
+        margin-bottom: 0;
+    }
+
+    .task-desc :deep(ul),
+    .task-desc :deep(ol) {
+        margin: 2px 0;
+        padding-left: 18px;
+    }
+
+    .task-desc :deep(code) {
+        font-size: 11px;
+    }
+
+    /* Inline edit inputs */
+    .edit-input {
+        width: 100%;
+        background: var(--bg-input);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        padding: 5px 8px;
+        font-size: 12px;
+        color: var(--text-primary);
+        outline: none;
+        font-family: inherit;
         resize: vertical;
+        transition: border-color 0.12s;
+        box-sizing: border-box;
+    }
+
+    .edit-input:focus {
+        border-color: var(--border-focus);
+    }
+
+    .edit-name {
+        font-weight: 600;
     }
 
     .edit-actions {
         display: flex;
         gap: 6px;
+        justify-content: flex-end;
+    }
+
+    /* Tiny buttons */
+    .btn-sm {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 9px;
+        border-radius: var(--radius-sm);
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: background 0.1s, opacity 0.1s;
+    }
+
+    .btn-primary {
+        background: var(--color-primary-600);
+        color: #fff;
+        border-color: var(--color-primary-600);
+    }
+
+    .btn-primary:hover {
+        background: var(--color-primary-700, var(--color-primary-600));
+    }
+
+    .btn-ghost {
+        background: none;
+        color: var(--text-secondary);
+        border-color: var(--border-default);
+    }
+
+    .btn-ghost:hover {
+        background: var(--bg-hover);
+    }
+
+    /* Result area */
+    .task-result-area {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    /* Tool calls area inside task cards */
+    .task-tools-area {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
         margin-top: 4px;
     }
 
-    /* Result */
-    .task-result-area {
-        margin-top: 5px;
+    .task-tools-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        margin-top: 2px;
     }
 
     .result-toggle {
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        font-size: 11px;
-        color: var(--text-tertiary);
         background: none;
         border: none;
         cursor: pointer;
+        font-size: 11px;
+        color: var(--text-tertiary);
         padding: 0;
+        transition: color 0.1s;
     }
 
     .result-toggle:hover {
         color: var(--text-secondary);
     }
 
-    .chevron {
+    .toggle-chevron {
         transition: transform 0.15s ease;
     }
 
-    .chevron--open {
+    .toggle-chevron--open {
         transform: rotate(180deg);
     }
 
     .task-result {
-        margin-top: 5px;
-        font-size: 12px;
+        font-size: 11px;
         color: var(--text-secondary);
         background: var(--bg-muted);
         border: 1px solid var(--border-default);
         border-radius: var(--radius-sm);
-        padding: 6px 9px;
-        white-space: pre-wrap;
+        padding: 6px 8px;
         max-height: 200px;
         overflow-y: auto;
+        word-break: break-word;
     }
 
-    .streaming-cursor {
+    .task-result :deep(p) {
+        margin: 0 0 4px;
+    }
+
+    .task-result :deep(p:last-child) {
+        margin-bottom: 0;
+    }
+
+    .task-result :deep(pre) {
+        margin: 4px 0;
+        font-size: 11px;
+    }
+
+    .task-result :deep(code) {
+        font-size: 11px;
+    }
+
+    /* Streaming cursor */
+    .stream-cursor {
         display: inline-block;
         width: 2px;
-        height: 12px;
+        height: 11px;
         background: currentColor;
-        margin-right: 3px;
+        margin-left: 1px;
         vertical-align: text-bottom;
-        animation: blink 1s step-end infinite;
+        border-radius: 1px;
+        animation: cur-blink 1s step-end infinite;
     }
 
-    @keyframes blink {
+    @keyframes cur-blink {
 
         0%,
         100% {
@@ -483,94 +840,105 @@
         }
     }
 
-    /* Actions */
-    .plan-actions {
+    /* ── Footer (Approve / Reject) ───────────────────────────── */
+    .add-task-row {
+        padding: 0 12px 10px;
+    }
+
+    .btn-add-task {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        width: 100%;
+        justify-content: center;
+        padding: 6px 0;
+        background: none;
+        border: 1.5px dashed var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-tertiary);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: border-color 0.12s, color 0.12s, background 0.12s;
+    }
+
+    .btn-add-task:hover {
+        border-color: var(--color-primary-400);
+        color: var(--color-primary-500);
+        background: color-mix(in srgb, var(--color-primary-500) 5%, transparent);
+    }
+
+    .plan-footer {
         display: flex;
+        align-items: center;
         gap: 8px;
-        padding: 10px 14px;
+        padding: 10px 12px;
         border-top: 1px solid var(--border-default);
         background: var(--bg-muted);
     }
 
-    .btn-approve,
+    .btn-approve {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: var(--color-success-600, #16a34a);
+        color: #fff;
+        border: none;
+        border-radius: var(--radius-lg);
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.12s;
+    }
+
+    .btn-approve:hover {
+        opacity: 0.88;
+    }
+
     .btn-reject {
         display: inline-flex;
         align-items: center;
         gap: 5px;
-        padding: 5px 12px;
+        background: none;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        color: var(--text-secondary);
+        padding: 6px 14px;
         font-size: 12px;
         font-weight: 600;
-        border-radius: var(--radius-md);
-        border: 1px solid transparent;
         cursor: pointer;
-        transition: all 0.12s ease;
-    }
-
-    .btn-approve {
-        background: var(--color-primary-500);
-        color: #fff;
-        border-color: var(--color-primary-600);
-    }
-
-    .btn-approve:hover {
-        background: var(--color-primary-600);
-    }
-
-    .btn-reject {
-        background: transparent;
-        color: var(--text-secondary);
-        border-color: var(--border-default);
+        transition: background 0.1s, border-color 0.1s, color 0.1s;
     }
 
     .btn-reject:hover {
-        border-color: var(--color-danger-400);
+        border-color: var(--color-danger-500);
         color: var(--color-danger-500);
         background: color-mix(in srgb, var(--color-danger-500) 6%, transparent);
     }
 
-    /* Small buttons for inline edit */
-    .btn-small {
-        padding: 3px 9px;
-        font-size: 11px;
-        font-weight: 500;
-        border-radius: var(--radius-sm);
-        border: 1px solid transparent;
-        cursor: pointer;
-    }
-
-    .btn-primary {
-        background: var(--color-primary-500);
-        color: #fff;
-        border-color: var(--color-primary-600);
-    }
-
-    .btn-ghost {
-        background: transparent;
-        color: var(--text-secondary);
-        border-color: var(--border-default);
-    }
-
-    /* Running hint */
+    /* ── Running hint ────────────────────────────────────────── */
     .running-hint {
         display: flex;
         align-items: center;
         gap: 7px;
+        margin: 0;
         padding: 8px 14px;
+        border-top: 1px solid var(--border-default);
         font-size: 12px;
         color: var(--text-tertiary);
-        border-top: 1px solid var(--border-default);
-        background: var(--bg-muted);
-        margin: 0;
+        font-style: italic;
     }
 
-    .spinner {
+    .mini-spinner {
         display: inline-block;
-        width: 10px;
-        height: 10px;
-        border: 1.5px solid var(--border-default);
-        border-top-color: var(--color-primary-500);
+        width: 11px;
+        height: 11px;
+        border: 1.5px solid var(--border-strong);
+        border-top-color: var(--color-primary-400);
         border-radius: 50%;
-        animation: spin 0.6s linear infinite;
+        animation: spin 0.8s linear infinite;
+        flex-shrink: 0;
     }
 
     @keyframes spin {

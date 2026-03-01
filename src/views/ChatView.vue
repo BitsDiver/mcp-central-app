@@ -6,7 +6,7 @@
   import ChatTopBar from '@/components/chat/ChatTopBar.vue';
   import ChatSessionPromptBar from '@/components/chat/ChatSessionPromptBar.vue';
   import ChatMessagesArea from '@/components/chat/ChatMessagesArea.vue';
-  import ChatErrorBanner from '@/components/chat/ChatErrorBanner.vue';
+  import ToolManagerModal from '@/components/chat/ToolManagerModal.vue';
   import { useChatStore } from '@/stores/chat';
   import { useChatSettingsStore } from '@/stores/chatSettings';
   import { useToolStore } from '@/stores/tools';
@@ -24,6 +24,7 @@
   // ── UI state ───────────────────────────────────────────────
   const linkToTenant = ref(false);
   const showSessionPrompt = ref(false);
+  const showToolManager = ref(false);
 
   // ── Composables ────────────────────────────────────────────
   const { sidebarOpen, sidebarWidth, startSidebarResize } = useSidebarResize();
@@ -38,7 +39,6 @@
   const {
     isGenerating,
     stop,
-    generationError,
     usedTokens,
     contextUsage,
     handleSend,
@@ -141,17 +141,18 @@
         </div>
 
         <ChatMessagesArea ref="messagesArea" :messages="messages" :retryable-ids="retryableIds"
-          :tool-count="toolStore.tools.length" :selected-model="settingsStore.settings.selectedModel"
+          :tool-count="toolStore.activeCount" :selected-model="settingsStore.settings.selectedModel"
           @retry="handleRetry" />
-
-        <ChatErrorBanner v-if="generationError" :error="generationError" @dismiss="generationError = null" />
 
         <div class="input-area">
           <ChatInput :disabled="!isConfigured" :is-generating="isGenerating"
             :context-usage="usedTokens > 0 ? contextUsage : undefined"
             :context-tokens="usedTokens > 0 ? usedTokens : undefined" :context-size="settingsStore.settings.contextSize"
-            :tool-count="toolStore.tools.length" @send="(c, a, m) => handleSend(c, a, m)" @stop="stop" />
+            :active-tool-count="toolStore.activeCount" :total-tool-count="toolStore.tools.length"
+            @send="(c, a, m) => handleSend(c, a, m)" @stop="stop" @open-tool-manager="showToolManager = true" />
         </div>
+
+        <ToolManagerModal :open="showToolManager" @close="showToolManager = false" />
       </div>
     </div>
   </AppLayout>

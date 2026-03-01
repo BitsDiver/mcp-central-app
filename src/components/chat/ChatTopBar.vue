@@ -32,15 +32,18 @@
 
         <div class="topbar-right">
             <!-- Session prompt override toggle -->
-            <button type="button" class="topbar-btn"
-                :class="{ 'prompt-btn-active': showSessionPrompt || !!session?.systemPrompt }"
-                :title="showSessionPrompt ? 'Hide session prompt' : 'Override system prompt for this session'"
+            <button type="button" class="prompt-override-btn" :class="{
+                'prompt-override-btn--open': showSessionPrompt,
+                'prompt-override-btn--modified': !!session?.systemPrompt,
+            }" :title="showSessionPrompt ? 'Hide session prompt' : 'Override system prompt for this session'"
                 @click="$emit('update:showSessionPrompt', !showSessionPrompt)">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 20h9" stroke-linecap="round" />
                     <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" stroke-linecap="round"
                         stroke-linejoin="round" />
                 </svg>
+                <span class="prompt-override-label">System Prompt</span>
+                <span v-if="session?.systemPrompt" class="prompt-override-dot" />
             </button>
 
             <div class="tenant-link-toggle">
@@ -112,6 +115,7 @@
         display: flex;
         align-items: center;
         gap: 8px;
+        padding-left: 12px;
     }
 
     .toggle-label {
@@ -123,5 +127,52 @@
     .prompt-btn-active {
         color: var(--color-primary-500) !important;
         background: color-mix(in srgb, var(--color-primary-500) 10%, transparent) !important;
+    }
+
+    /* ── Prompt override button ────────────────── */
+    .prompt-override-btn {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-default);
+        background: none;
+        cursor: pointer;
+        color: var(--text-tertiary);
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+        transition: all 0.12s ease;
+        position: relative;
+    }
+
+    .prompt-override-btn:hover {
+        color: var(--text-primary);
+        border-color: var(--border-focus);
+        background: var(--bg-hover);
+    }
+
+    .prompt-override-btn--open {
+        color: var(--color-primary-500);
+        border-color: var(--color-primary-400);
+        background: color-mix(in srgb, var(--color-primary-500) 6%, transparent);
+    }
+
+    .prompt-override-btn--modified {
+        color: var(--color-primary-500);
+        border-color: var(--color-primary-400);
+    }
+
+    .prompt-override-label {
+        line-height: 1;
+    }
+
+    .prompt-override-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--color-primary-500);
+        flex-shrink: 0;
     }
 </style>

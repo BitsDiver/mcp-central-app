@@ -17,12 +17,14 @@
     contextUsage?: number;
     contextTokens?: number;
     contextSize?: number;
-    toolCount?: number;
+    activeToolCount?: number;
+    totalToolCount?: number;
   }>();
 
   const emit = defineEmits<{
     send: [content: string, attachments: ChatAttachment[], mode: ChatMode];
     stop: [];
+    openToolManager: [];
   }>();
 
   const text = ref('');
@@ -161,14 +163,17 @@
         <ChatModeSelector />
         <span class="footer-sep" aria-hidden="true" />
         <ModelSelector />
-        <span v-if="toolCount" class="tool-badge" :title="`${toolCount} tool${toolCount !== 1 ? 's' : ''} available`">
+        <button v-if="totalToolCount" type="button" class="tool-badge"
+          :class="{ 'tool-badge--partial': activeToolCount !== undefined && activeToolCount < totalToolCount }"
+          :title="`${activeToolCount ?? totalToolCount} / ${totalToolCount} tools active — click to manage`"
+          @click="emit('openToolManager')">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path
               d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"
               stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-          <span class="tool-count">{{ toolCount }}</span>
-        </span>
+          <span class="tool-count">{{ activeToolCount ?? totalToolCount }}</span>
+        </button>
       </div>
       <div class="footer-right">
         <button type="button" :class="['icon-btn', 'send-icon', { 'send-active': canSend, 'send-stop': isGenerating }]"
@@ -399,8 +404,22 @@
     font-size: 11px;
     font-weight: 500;
     color: var(--text-tertiary);
-    cursor: default;
+    cursor: pointer;
     white-space: nowrap;
+    background: none;
+    border: none;
+    padding: 2px 5px;
+    border-radius: var(--radius-sm);
+    transition: color 0.12s, background 0.12s;
+  }
+
+  .tool-badge:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  .tool-badge--partial {
+    color: var(--color-primary-500);
   }
 
   .tool-badge svg {

@@ -16,6 +16,7 @@
     const draftMaxIterations = ref(chatSettings.settings.maxIterations ?? DEFAULT_MAX_ITERATIONS);
     const draftOllamaUrl = ref(chatSettings.settings.ollamaUrl);
     const draftOllamaApiKey = ref(chatSettings.settings.ollamaApiKey ?? '');
+    const draftOllamaPath = ref<'browser' | 'backend'>(chatSettings.settings.ollamaPath ?? 'browser');
 
     const isDirty = computed(() =>
         draftModel.value !== chatSettings.settings.selectedModel ||
@@ -23,8 +24,8 @@
         draftSystemPrompt.value !== chatSettings.settings.systemPrompt ||
         draftMaxIterations.value !== (chatSettings.settings.maxIterations ?? DEFAULT_MAX_ITERATIONS) ||
         draftOllamaUrl.value !== chatSettings.settings.ollamaUrl ||
-        draftOllamaApiKey.value !== (chatSettings.settings.ollamaApiKey ?? ''),
-    );
+        draftOllamaApiKey.value !== (chatSettings.settings.ollamaApiKey ?? '') ||
+        draftOllamaPath.value !== (chatSettings.settings.ollamaPath ?? 'browser'),);
 
     // ── Key management state ──────────────────────────────────────────────────────
     const newApiKey = ref('');
@@ -121,6 +122,7 @@
             maxIterations: draftMaxIterations.value,
             ollamaUrl: draftOllamaUrl.value,
             ollamaApiKey: draftOllamaApiKey.value,
+            ollamaPath: draftOllamaPath.value,
         });
         configSaved.value = true;
         setTimeout(() => { configSaved.value = false; }, 2000);
@@ -235,6 +237,24 @@
                     <p class="text-xs" style="color: var(--text-tertiary)">
                         Sent as <code
                             style="font-family: var(--font-mono); font-size: 11px;">Authorization: Bearer &lt;key&gt;</code>
+                    </p>
+                </div>
+
+                <!-- Ollama routing -->
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-sm font-medium" style="color: var(--text-primary)">Ollama routing</label>
+                    <div class="flex gap-2">
+                        <button type="button" @click="draftOllamaPath = 'browser'"
+                            :class="['flex-1 py-1.5 text-xs rounded-md border transition-colors', draftOllamaPath === 'browser' ? 'border-blue-500 bg-blue-500/10 text-blue-500' : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--border-focus)]']">
+                            Browser (direct)
+                        </button>
+                        <button type="button" @click="draftOllamaPath = 'backend'"
+                            :class="['flex-1 py-1.5 text-xs rounded-md border transition-colors', draftOllamaPath === 'backend' ? 'border-blue-500 bg-blue-500/10 text-blue-500' : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:border-[var(--border-focus)]']">
+                            Backend (proxy)
+                        </button>
+                    </div>
+                    <p class="text-xs" style="color: var(--text-tertiary)">
+                        Browser: fetches Ollama directly from your browser. Backend: routes via mcp-central server.
                     </p>
                 </div>
 
@@ -378,7 +398,7 @@
                 <p class="text-xs" style="color: var(--text-tertiary);">
                     <template v-if="draftModel && MODEL_CONTEXT_LIMITS[draftModel]">
                         Maximum pour <strong class="font-medium" style="color: var(--text-secondary);">{{ draftModel
-                            }}</strong> : {{ fmtTokens(maxContextSize) }}
+                        }}</strong> : {{ fmtTokens(maxContextSize) }}
                     </template>
                     <template v-else>
                         Maximum (par défaut) : {{ fmtTokens(maxContextSize) }}

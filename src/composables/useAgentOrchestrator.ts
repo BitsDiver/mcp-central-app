@@ -51,6 +51,7 @@ export function useAgentOrchestrator() {
     task: AgentTask,
     contextMessages: ChatMessage[],
     abortSignal: AbortSignal,
+    sessionSystemPrompt?: string,
   ): Promise<string> {
     const { settings } = settingsStore;
 
@@ -85,9 +86,10 @@ export function useAgentOrchestrator() {
         ollamaApiKey: settings.ollamaApiKey,
         model: settings.selectedModel,
         contextSize: settings.contextSize,
-        systemPrompt: task.systemPrompt ?? settings.systemPrompt,
+        systemPrompt:
+          task.systemPrompt ?? sessionSystemPrompt ?? settings.systemPrompt,
         messages: taskMessages,
-        tools: toolStore.tools,
+        tools: toolStore.activeTools,
         maxIterations: settings.maxIterations,
         onToken: (text) => {
           accContent += text;
@@ -97,11 +99,20 @@ export function useAgentOrchestrator() {
           });
         },
         onToolCall: async (toolCall: ChatToolCall) => {
-          // Track tool calls so they're visible in the AgentBlock
+          // Upsert by ID to avoid duplicates (a tool call fires twice:
+          // once as "running" then again as "success" or "error")
           const currentTask = _getTask(plan.id, task.id);
           const existing = currentTask?.toolCalls ?? [];
+          const idx = existing.findIndex((tc) => tc.id === toolCall.id);
+          let updated: ChatToolCall[];
+          if (idx !== -1) {
+            updated = [...existing];
+            updated[idx] = { ...toolCall };
+          } else {
+            updated = [...existing, { ...toolCall }];
+          }
           planningStore.updateTask(plan.id, task.id, {
-            toolCalls: [...existing, toolCall],
+            toolCalls: updated,
           });
         },
         onDone: () => {
@@ -153,6 +164,7 @@ export function useAgentOrchestrator() {
   async function execute(
     plan: AgentPlan,
     contextMessages: ChatMessage[],
+    sessionSystemPrompt?: string,
   ): Promise<OrchestrationResult> {
     isOrchestrating.value = true;
     _abortController = new AbortController();
@@ -169,9 +181,13 @@ export function useAgentOrchestrator() {
         // Run all tasks in this group in parallel
         const groupResults = await Promise.allSettled(
           group.map((task) =>
-            _executeTask(plan, task, contextMessages, signal).then(
-              (content) => ({ task, content }),
-            ),
+            _executeTask(
+              plan,
+              task,
+              contextMessages,
+              signal,
+              sessionSystemPrompt,
+            ).then((content) => ({ task, content })),
           ),
         );
 

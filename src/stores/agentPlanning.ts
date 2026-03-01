@@ -95,6 +95,62 @@ export const useAgentPlanningStore = defineStore("agentPlanning", () => {
     updateTask(planId, taskId, { name, description });
   }
 
+  /** Edit the plan title before approval. */
+  function editTitle(planId: string, title: string): void {
+    if (!pendingPlan.value || pendingPlan.value.id !== planId) return;
+    pendingPlan.value = { ...pendingPlan.value, title };
+  }
+
+  /**
+   * Add a new blank task as a single-task group.
+   * @param afterGroupIndex  Insert after this group index (defaults to end).
+   * @returns The new task's ID.
+   */
+  function addTask(planId: string, afterGroupIndex?: number): string {
+    if (!pendingPlan.value || pendingPlan.value.id !== planId) return "";
+    const id = crypto.randomUUID();
+    const newTask: import("@/types").AgentTask = {
+      id,
+      name: "New task",
+      description: "",
+      status: "pending",
+    };
+    const groups = [...pendingPlan.value.parallelGroups];
+    const insertAt =
+      afterGroupIndex !== undefined
+        ? Math.min(afterGroupIndex + 1, groups.length)
+        : groups.length;
+    groups.splice(insertAt, 0, [newTask]);
+    pendingPlan.value = { ...pendingPlan.value, parallelGroups: groups };
+    return id;
+  }
+
+  /** Remove a task. If its group becomes empty, remove the group too. */
+  function removeTask(planId: string, taskId: string): void {
+    if (!pendingPlan.value || pendingPlan.value.id !== planId) return;
+    const groups = pendingPlan.value.parallelGroups
+      .map((group) => group.filter((t) => t.id !== taskId))
+      .filter((group) => group.length > 0);
+    pendingPlan.value = { ...pendingPlan.value, parallelGroups: groups };
+  }
+
+  /**
+   * Swap a group with its neighbour.
+   * @param direction  'up' swaps with previous group, 'down' with next.
+   */
+  function moveGroup(
+    planId: string,
+    groupIndex: number,
+    direction: "up" | "down",
+  ): void {
+    if (!pendingPlan.value || pendingPlan.value.id !== planId) return;
+    const groups = [...pendingPlan.value.parallelGroups];
+    const target = direction === "up" ? groupIndex - 1 : groupIndex + 1;
+    if (target < 0 || target >= groups.length) return;
+    [groups[groupIndex], groups[target]] = [groups[target], groups[groupIndex]];
+    pendingPlan.value = { ...pendingPlan.value, parallelGroups: groups };
+  }
+
   return {
     pendingPlan,
     waitForApproval,
@@ -104,5 +160,9 @@ export const useAgentPlanningStore = defineStore("agentPlanning", () => {
     markRunning,
     markCompleted,
     editTask,
+    editTitle,
+    addTask,
+    removeTask,
+    moveGroup,
   };
 });

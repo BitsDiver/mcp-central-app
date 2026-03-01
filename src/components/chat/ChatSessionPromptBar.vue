@@ -1,5 +1,7 @@
 <script setup lang="ts">
+    import { computed } from 'vue';
     import { useChatStore } from '@/stores/chat';
+    import { useChatSettingsStore } from '@/stores/chatSettings';
     import type { ChatSession } from '@/types';
 
     const props = defineProps<{
@@ -8,6 +10,13 @@
     }>();
 
     const chatStore = useChatStore();
+    const settingsStore = useChatSettingsStore();
+
+    /** The default system prompt shown as placeholder when no override is set. */
+    const defaultPrompt = computed(() => settingsStore.settings.systemPrompt);
+
+    /** True when the user has typed a custom prompt for this session. */
+    const isModified = computed(() => !!props.session?.systemPrompt);
 
     function onInput(e: Event) {
         if (!props.session) return;
@@ -17,17 +26,22 @@
 
 <template>
     <div v-if="visible" class="session-prompt-bar">
-        <label class="session-prompt-label">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <path d="M8 10h8M8 14h5" stroke-linecap="round" />
-            </svg>
-            Session prompt
-            <span v-if="session?.systemPrompt" class="session-prompt-badge">overriding global</span>
-        </label>
-        <textarea :value="session?.systemPrompt ?? ''"
-            placeholder="Override the global system prompt for this session only…" rows="2"
-            class="session-prompt-textarea" @input="onInput" />
+        <div class="prompt-bar-header">
+            <label class="session-prompt-label">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M8 10h8M8 14h5" stroke-linecap="round" />
+                </svg>
+                Session system prompt
+            </label>
+            <span v-if="isModified" class="session-prompt-badge">Modified</span>
+            <span v-else class="session-prompt-badge session-prompt-badge--default">Default</span>
+        </div>
+        <textarea :value="session?.systemPrompt ?? ''" :placeholder="defaultPrompt ?? 'No default system prompt set.'"
+            rows="3" class="session-prompt-textarea" :class="{ 'is-modified': isModified }" @input="onInput" />
+        <p class="prompt-hint">
+            Leave empty to use the global system prompt. This prompt is also used in Plan and Agent modes.
+        </p>
     </div>
 </template>
 
@@ -40,6 +54,12 @@
         border-bottom: 1px solid var(--border-default);
         background: color-mix(in srgb, var(--color-primary-500) 3%, var(--bg-surface));
         flex-shrink: 0;
+    }
+
+    .prompt-bar-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
 
     .session-prompt-label {
@@ -64,6 +84,11 @@
         color: var(--color-primary-500);
     }
 
+    .session-prompt-badge--default {
+        background: color-mix(in srgb, var(--text-tertiary) 10%, transparent);
+        color: var(--text-tertiary);
+    }
+
     .session-prompt-textarea {
         width: 100%;
         padding: 6px 10px;
@@ -81,10 +106,23 @@
 
     .session-prompt-textarea::placeholder {
         color: var(--text-tertiary);
+        font-style: italic;
+        opacity: 0.7;
     }
 
     .session-prompt-textarea:focus {
         border-color: var(--border-focus);
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .session-prompt-textarea.is-modified {
+        border-color: var(--color-primary-400);
+    }
+
+    .prompt-hint {
+        margin: 0;
+        font-size: 11px;
+        color: var(--text-tertiary);
+        line-height: 1.4;
     }
 </style>
