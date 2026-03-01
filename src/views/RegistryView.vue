@@ -5,9 +5,11 @@
   import AppModal from '@/components/ui/AppModal.vue';
   import AppInput from '@/components/ui/AppInput.vue';
   import AppAlert from '@/components/ui/AppAlert.vue';
+  import AppListbox from '@/components/ui/AppListbox.vue';
   import SkeletonBlock from '@/components/ui/SkeletonBlock.vue';
   import ServerCard from '@/components/registry/ServerCard.vue';
   import type { RegistryServer } from '@/data/mcpRegistry';
+  import type { ListboxOption } from '@/types';
   import { useRegistry } from '@/composables/useRegistry';
   import { useEndpointStore } from '@/stores/endpoints';
   import { useAgentStore } from '@/stores/agents';
@@ -194,7 +196,7 @@
               :label="`${envVar.key}${envVar.required ? '' : ' (optional)'}`" :placeholder="envVar.placeholder ?? ''"
               :id="`env-${envVar.key}`" />
             <p v-if="envVar.description" class="text-xs mt-1" style="color: var(--text-tertiary);">{{ envVar.description
-              }}
+            }}
             </p>
           </div>
         </div>
@@ -206,14 +208,12 @@
         </div>
         <!-- Agent select for stdio servers -->
         <div v-if="configServer.transport === 'stdio' && agentStore.agents.length > 0">
-          <label class="block text-sm font-medium mb-1" style="color: var(--text-primary);">Deploy on agent</label>
-          <select v-model="configAgentId" class="w-full px-3 py-2 text-sm rounded-lg border outline-none"
-            style="background: var(--bg-input); color: var(--text-primary); border-color: var(--border-default);">
-            <option value="">None (direct connection)</option>
-            <option v-for="agent in agentStore.agents" :key="agent.id" :value="agent.id">
-              {{ agent.name }}{{ agent.isConnected ? ' ●' : ' ○' }}
-            </option>
-          </select>
+          <AppListbox v-model="configAgentId" label="Deploy on agent" placeholder="None (direct connection)" :options="agentStore.agents.map((a): ListboxOption => ({
+            value: a.id,
+            label: a.name,
+            description: a.isConnected ? 'Connected' : 'Offline',
+            icon: `<svg width='10' height='10' viewBox='0 0 10 10'><circle cx='5' cy='5' r='5' fill='${a.isConnected ? '#22c55e' : '#9ca3af'}'/></svg>`,
+          }))" />
           <p v-if="!configAgentId" class="text-xs mt-1" style="color: #ca8a04;">
             stdio servers require a local agent to run. Select one above.
           </p>

@@ -7,6 +7,24 @@ export type {
   AgentPlan,
 } from "./agent";
 
+// ── Listbox / Dropdown ─────────────────────────────────────────────────────
+
+/** A single option rendered inside AppListbox. */
+export interface ListboxOption {
+  /** Unique value bound to v-model */
+  value: string;
+  /** Display text */
+  label: string;
+  /** Optional secondary text shown below the label */
+  description?: string;
+  /** Leading icon — raw SVG string or a Vue component */
+  icon?: string | import("vue").Component;
+  /** When true the option is visible but not selectable */
+  disabled?: boolean;
+  /** Group header this option belongs to (derived from first-seen order) */
+  group?: string;
+}
+
 export interface User {
   id: string;
   email: string;

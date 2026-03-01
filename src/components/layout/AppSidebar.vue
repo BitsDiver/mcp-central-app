@@ -60,7 +60,7 @@
     style="background: var(--bg-sidebar); border-color: var(--border-default);">
 
     <!-- Header: logo + title + toggle button -->
-    <div class="sidebar-header" style="border-color: var(--border-default);">
+    <div class="sidebar-header" style="border-color: var(--bg-sidebar);">
       <div v-if="!collapsed" class="sidebar-logo">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
           <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />

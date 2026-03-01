@@ -2,7 +2,8 @@
     import { computed, onMounted } from 'vue';
     import { useChatSettingsStore, PROVIDER_DEFAULT_MODELS } from '@/stores/chatSettings';
     import { useAiKeysStore } from '@/stores/aiKeys';
-    import type { LLMProvider } from '@/types';
+    import AppListbox from '@/components/ui/AppListbox.vue';
+    import type { LLMProvider, ListboxOption } from '@/types';
 
     const chatSettings = useChatSettingsStore();
     const aiKeys = useAiKeysStore();
@@ -39,26 +40,29 @@
         return result;
     });
 
-    /** Model groups to render in the <select> */
-    const providerGroups = computed(() =>
-        configuredProviders.value.map((p) => ({
-            provider: p,
-            label: PROVIDER_LABELS[p],
-            models:
-                p === 'ollama'
-                    ? chatSettings.availableModels.map((m) => m.name)
-                    : (PROVIDER_DEFAULT_MODELS[p] ?? []),
-        })),
-    );
+    const CUBE_ICON = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" /></svg>`;
+
+    /** Flat options list with groups for each provider */
+    const modelOptions = computed<ListboxOption[]>(() => {
+        const opts: ListboxOption[] = [];
+        for (const p of configuredProviders.value) {
+            const models = p === 'ollama'
+                ? chatSettings.availableModels.map((m) => m.name)
+                : (PROVIDER_DEFAULT_MODELS[p] ?? []);
+            for (const m of models) {
+                opts.push({ value: `${p}::${m}`, label: m, group: PROVIDER_LABELS[p] });
+            }
+        }
+        return opts;
+    });
 
     const currentProvider = computed(() => chatSettings.settings.provider ?? 'ollama');
     const selectedModel = computed(() => chatSettings.settings.selectedModel);
 
-    /** Encode provider + model so we can decode on change */
+    /** Encode provider + model */
     const selectValue = computed(() => `${currentProvider.value}::${selectedModel.value}`);
 
-    function handleChange(e: Event) {
-        const raw = (e.target as HTMLSelectElement).value;
+    function handleChange(raw: string) {
         const sep = raw.indexOf('::');
         if (sep < 0) return;
         const provider = raw.slice(0, sep) as LLMProvider;
@@ -71,70 +75,6 @@
 </script>
 
 <template>
-    <div class="model-selector">
-        <svg class="selector-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path
-                d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
-        </svg>
-        <select :value="selectValue" @change="handleChange" class="model-select"
-            :title="`${PROVIDER_LABELS[currentProvider]} — ${selectedModel || 'No model selected'}`">
-            <template v-for="group in providerGroups" :key="group.provider">
-                <optgroup :label="group.label">
-                    <option v-if="group.models.length === 0" value="" disabled>No models</option>
-                    <option v-for="m in group.models" :key="`${group.provider}::${m}`"
-                        :value="`${group.provider}::${m}`">
-                        {{ m }}
-                    </option>
-                </optgroup>
-            </template>
-            <option v-if="providerGroups.length === 0" value="" disabled>
-                No provider configured
-            </option>
-        </select>
-    </div>
+    <AppListbox :model-value="selectValue" @update:model-value="handleChange" :options="modelOptions"
+        :trigger-icon="CUBE_ICON" size="sm" placement="top" searchable placeholder="No model" />
 </template>
-
-<style scoped>
-    .model-selector {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        min-width: 0;
-    }
-
-    .selector-icon {
-        flex-shrink: 0;
-        color: var(--text-tertiary);
-    }
-
-    .model-select {
-        appearance: none;
-        -webkit-appearance: none;
-        background: none;
-        border: none;
-        outline: none;
-        cursor: pointer;
-        font-family: var(--font-sans);
-        font-size: 11px;
-        font-weight: 500;
-        color: var(--text-tertiary);
-        padding: 2px 14px 2px 0;
-        max-width: 200px;
-        text-overflow: ellipsis;
-        overflow: hidden;
-        white-space: nowrap;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 0 center;
-        transition: color 0.12s ease;
-    }
-
-    .model-select:hover {
-        color: var(--text-secondary);
-    }
-
-    .model-select:focus {
-        color: var(--text-primary);
-    }
-</style>

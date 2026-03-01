@@ -4,7 +4,7 @@
   import AppButton from '@/components/ui/AppButton.vue';
   import AppModal from '@/components/ui/AppModal.vue';
   import AppInput from '@/components/ui/AppInput.vue';
-  import AppSelect from '@/components/ui/AppSelect.vue';
+  import AppListbox from '@/components/ui/AppListbox.vue';
   import AppTextarea from '@/components/ui/AppTextarea.vue';
   import AppAlert from '@/components/ui/AppAlert.vue';
   import AppToggle from '@/components/ui/AppToggle.vue';
@@ -78,16 +78,37 @@
   });
 
   const transportOptions = [
-    { value: 'streamable-http', label: 'Streamable HTTP' },
-    { value: 'stdio', label: 'stdio (via local agent)' },
-    { value: 'a2a', label: 'A2A Agent (HTTP+JSON)' },
+    {
+      value: 'streamable-http',
+      label: 'Streamable HTTP',
+      description: 'Connect to a remote MCP server via HTTP',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>',
+    },
+    {
+      value: 'stdio',
+      label: 'stdio (via local agent)',
+      description: 'Run a local process through a tunnel agent',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>',
+    },
+    {
+      value: 'a2a',
+      label: 'A2A Agent (HTTP+JSON)',
+      description: 'Connect to an external A2A v1.0 agent',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>',
+    },
   ];
 
   const agentOptions = computed(() => [
-    { value: '', label: 'None (direct server connection)' },
+    {
+      value: '',
+      label: 'None (direct server connection)',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+    },
     ...agentStore.agents.map((a) => ({
       value: a.id,
-      label: `${a.name}${a.isConnected ? ' ●' : ' ○'}`,
+      label: a.name,
+      description: a.isConnected ? 'Connected' : 'Offline',
+      icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" fill="${a.isConnected ? '#22c55e' : '#9ca3af'}" stroke="none"/></svg>`,
     })),
   ]);
 
@@ -474,7 +495,7 @@
               <tr v-for="ep in filtered" :key="ep.id" class="transition-colors hover:bg-[var(--bg-hover)]">
                 <td class="px-5 py-3">
                   <router-link :to="`/endpoints/${ep.id}`" class="font-medium text-blue-500 hover:underline">{{ ep.name
-                  }}</router-link>
+                    }}</router-link>
                 </td>
                 <td class="px-5 py-3 hidden sm:table-cell">
                   <code class="text-xs px-1.5 py-0.5 rounded font-mono"
@@ -531,7 +552,7 @@
           <AppInput v-model="form.namespace" label="Namespace" placeholder="github" :error="errors['namespace']"
             required id="ep-namespace" />
         </div>
-        <AppSelect v-model="form.transport" label="Transport" :options="transportOptions" id="ep-transport" />
+        <AppListbox v-model="form.transport" label="Transport" :options="transportOptions" id="ep-transport" />
 
         <template v-if="form.transport === 'streamable-http'">
           <AppInput v-model="form.url" label="URL" placeholder="https://mcp.example.com" :error="errors['url']"
@@ -562,7 +583,7 @@
         <div class="flex items-center gap-2 pt-1">
           <AppToggle v-model="form.isEnabled" label="Enable immediately after creation" />
         </div>
-        <AppSelect v-model="form.agentId" label="Execute via local agent (optional)" :options="agentOptions"
+        <AppListbox v-model="form.agentId" label="Execute via local agent (optional)" :options="agentOptions"
           id="ep-agent" />
         <p v-if="form.transport === 'stdio' && !form.agentId" class="text-xs -mt-2" style="color: #ca8a04;">
           stdio servers require a local agent. Select one above or add an agent first.

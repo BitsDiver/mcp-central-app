@@ -2,7 +2,8 @@
     import { ref, computed, onMounted, watch } from 'vue';
     import { useChatSettingsStore, PROVIDER_DEFAULT_MODELS, MODEL_CONTEXT_LIMITS, DEFAULT_MAX_CONTEXT, DEFAULT_MAX_ITERATIONS, DEFAULT_SYSTEM_PROMPT } from '@/stores/chatSettings';
     import { useAiKeysStore } from '@/stores/aiKeys';
-    import type { LLMProvider } from '@/types';
+    import AppListbox from '@/components/ui/AppListbox.vue';
+    import type { LLMProvider, ListboxOption } from '@/types';
 
     const chatSettings = useChatSettingsStore();
     const aiKeys = useAiKeysStore();
@@ -137,6 +138,21 @@
         return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / 1048576).toFixed(0)} MB`;
     }
 
+    // ── Listbox options ───────────────────────────────────────────────────────────
+    const ollamaModelOptions = computed<ListboxOption[]>(() => {
+        if (chatSettings.availableModels.length === 0) return [];
+        return chatSettings.availableModels.map((m) => ({
+            value: m.name,
+            label: m.name,
+            description: formatModelSize(m.size),
+        }));
+    });
+
+    const backendModelOptions = computed<ListboxOption[]>(() => [
+        ...backendModels.value.map((m) => ({ value: m, label: m })),
+        { value: '__custom__', label: 'Custom model…', description: 'Enter a model name manually' },
+    ]);
+
     // ── Context window slider (log scale) ────────────────────────────────────────
     const MIN_CTX = 1024;
 
@@ -268,16 +284,10 @@
                 </div>
 
                 <div>
-                    <label class="text-sm font-medium block mb-1.5" style="color: var(--text-primary);">Model</label>
-                    <select :value="draftModel" @change="draftModel = ($event.target as HTMLSelectElement).value"
-                        class="w-full px-3 py-2 text-sm rounded-lg border outline-none transition-colors duration-150"
-                        style="background: var(--bg-input); color: var(--text-primary); border-color: var(--border-default);">
-                        <option value="" disabled>{{ chatSettings.availableModels.length === 0 ? 'No models detected' :
-                            'Select a model' }}</option>
-                        <option v-for="m in chatSettings.availableModels" :key="m.name" :value="m.name">
-                            {{ m.name }} ({{ formatModelSize(m.size) }})
-                        </option>
-                    </select>
+                    <AppListbox :model-value="draftModel" @update:model-value="draftModel = $event" label="Model"
+                        :options="ollamaModelOptions"
+                        :placeholder="chatSettings.availableModels.length === 0 ? 'No models detected' : 'Select a model'"
+                        :searchable="ollamaModelOptions.length > 6" />
                     <p v-if="chatSettings.availableModels.length === 0 && !chatSettings.modelLoadError"
                         class="text-xs mt-1" style="color: var(--text-tertiary);">
                         Click the
@@ -357,9 +367,7 @@
 
                 <!-- Model selector -->
                 <div>
-                    <label class="text-sm font-medium block mb-1.5" style="color: var(--text-primary);">Model</label>
-                    <select :value="customModelMode ? '__custom__' : draftModel" @change="(e) => {
-                        const v = (e.target as HTMLSelectElement).value;
+                    <AppListbox :model-value="customModelMode ? '__custom__' : draftModel" @update:model-value="(v: string) => {
                         if (v === '__custom__') {
                             customModelMode = true;
                             draftModel = '';
@@ -367,12 +375,7 @@
                             customModelMode = false;
                             draftModel = v;
                         }
-                    }" class="w-full px-3 py-2 text-sm rounded-lg border outline-none transition-colors duration-150"
-                        style="background: var(--bg-input); color: var(--text-primary); border-color: var(--border-default);">
-                        <option value="" disabled>Select a model</option>
-                        <option v-for="m in backendModels" :key="m" :value="m">{{ m }}</option>
-                        <option value="__custom__">Custom model…</option>
-                    </select>
+                    }" label="Model" :options="backendModelOptions" placeholder="Select a model" />
                     <input v-if="customModelMode" :value="draftModel"
                         @input="draftModel = ($event.target as HTMLInputElement).value"
                         placeholder="Enter model name (e.g. gpt-4o-2024-11-20)"
@@ -398,7 +401,7 @@
                 <p class="text-xs" style="color: var(--text-tertiary);">
                     <template v-if="draftModel && MODEL_CONTEXT_LIMITS[draftModel]">
                         Maximum pour <strong class="font-medium" style="color: var(--text-secondary);">{{ draftModel
-                        }}</strong> : {{ fmtTokens(maxContextSize) }}
+                            }}</strong> : {{ fmtTokens(maxContextSize) }}
                     </template>
                     <template v-else>
                         Maximum (par défaut) : {{ fmtTokens(maxContextSize) }}
