@@ -2,7 +2,7 @@
   import { computed, onMounted, ref } from 'vue';
   import AppLayout from '@/components/layout/AppLayout.vue';
   import ArchitectureDiagram from '@/components/dashboard/ArchitectureDiagram.vue';
-  import VscodeConfigButton from '@/components/dashboard/VscodeConfigButton.vue';
+  import AIClientInstallButton from '@/components/dashboard/AIClientInstallButton.vue';
   import { useStatusStore } from '@/stores/status';
   import { useToolStore } from '@/stores/tools';
   import { useTenantStore } from '@/stores/tenant';
@@ -92,7 +92,7 @@
             {{ tenantStore.selectedTenant?.name ?? 'No tenant selected' }}
           </p>
         </div>
-        <VscodeConfigButton />
+        <AIClientInstallButton />
       </div>
 
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
