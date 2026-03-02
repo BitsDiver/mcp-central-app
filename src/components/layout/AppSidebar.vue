@@ -50,6 +50,14 @@
     },
   ]);
 
+  const bottomItems = computed(() => [
+    {
+      to: '/help',
+      label: 'Help',
+      icon: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+    },
+  ]);
+
   function isActive(path: string): boolean {
     return route.path === path || (path !== '/' && route.path.startsWith(path));
   }
@@ -79,6 +87,19 @@
     <!-- Nav -->
     <nav class="sidebar-nav">
       <router-link v-for="item in navItems" :key="item.to" :to="item.to"
+        :class="['sidebar-link', { active: isActive(item.to) }]" :title="collapsed ? item.label : undefined"
+        @click="$emit('linkClicked')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+          class="shrink-0">
+          <path :d="item.icon" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span v-if="!collapsed">{{ item.label }}</span>
+      </router-link>
+    </nav>
+
+    <!-- Bottom links (Help, etc.) -->
+    <nav class="sidebar-bottom">
+      <router-link v-for="item in bottomItems" :key="item.to" :to="item.to"
         :class="['sidebar-link', { active: isActive(item.to) }]" :title="collapsed ? item.label : undefined"
         @click="$emit('linkClicked')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
@@ -177,6 +198,14 @@
     flex-direction: column;
     gap: 2px;
     overflow: hidden;
+  }
+
+  .sidebar-bottom {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border-top: 1px solid var(--border-default);
   }
 
   .sidebar-link {

@@ -54,6 +54,10 @@
       </svg>
     </div>
     <div class="assistant-body">
+      <!-- Thinking block: visible during waking-up / thinking phases -->
+      <ThinkingBlock v-if="message.thinking !== undefined" :content="message.thinking ?? ''"
+        :is-streaming="message.isStreaming" />
+
       <div v-if="message.error" class="assistant-error">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="10" />
@@ -61,12 +65,13 @@
         </svg>
         <span>{{ message.error }}</span>
       </div>
-      <!-- Live markdown: renders the plan as # title + ## tasks appear token by token -->
-      <div v-else-if="renderedContent" class="markdown-body assistant-markdown" v-html="renderedContent" />
-      <!-- No content yet: pulse dots while the first tokens arrive -->
+      <!-- Streaming: pulse dots + dynamic phase label ("Waking up model…" / "Thinking…" / "Generating plan…") -->
       <span v-else-if="message.isStreaming" class="streaming-dots-row">
         <span class="dot" /><span class="dot" /><span class="dot" />
+        <span class="plan-status-label">{{ message.content || 'Waking up model\u2026' }}</span>
       </span>
+      <!-- Non-streaming fallback (e.g. planning failed with a text message) -->
+      <div v-else-if="renderedContent" class="markdown-body assistant-markdown" v-html="renderedContent" />
     </div>
   </div>
 
@@ -311,6 +316,13 @@
     gap: 4px;
     align-items: center;
     padding: 4px 0;
+  }
+
+  .plan-status-label {
+    margin-left: 6px;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    letter-spacing: 0.01em;
   }
 
   .dot {

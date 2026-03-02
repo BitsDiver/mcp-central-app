@@ -125,7 +125,7 @@
 
       <div class="card overflow-hidden">
         <div class="px-5 py-4 border-b flex items-center justify-between" style="border-color: var(--border-default);">
-          <h2 class="text-sm font-semibold" style="color: var(--text-primary);">Upstream Status</h2>
+          <h2 class="text-sm font-semibold" style="color: var(--text-primary);">Endpoints Status</h2>
           <span class="badge badge-neutral text-xs">{{ statusStore.upstreams.length }} servers</span>
         </div>
 

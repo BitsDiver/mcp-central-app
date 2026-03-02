@@ -117,6 +117,16 @@
     endpointStore.endpoints.filter((e) => !e.agentId),
   );
 
+  const isFormValid = computed(() => {
+    const f = form.value;
+    if (!f.name.trim() || !f.namespace.trim()) return false;
+    if (f.transport === 'streamable-http' || f.transport === 'a2a') return !!f.url.trim();
+    // stdio must be assigned to an agent — prevents running processes directly on mcp-central.
+    // Offline agents are accepted; the endpoint will activate when the agent reconnects.
+    if (f.transport === 'stdio') return !!f.command.trim() && !!f.agentId;
+    return true;
+  });
+
   /** Endpoints managed by a specific agent */
   function agentEndpoints(agentId: string): Endpoint[] {
     return endpointStore.endpoints.filter((e) => e.agentId === agentId);
@@ -586,12 +596,13 @@
         <AppListbox v-model="form.agentId" label="Execute via local agent (optional)" :options="agentOptions"
           id="ep-agent" />
         <p v-if="form.transport === 'stdio' && !form.agentId" class="text-xs -mt-2" style="color: #ca8a04;">
-          stdio servers require a local agent. Select one above or add an agent first.
+          stdio servers must run via a local agent — select one above (offline agents are accepted).
         </p>
       </form>
       <template #footer>
         <AppButton variant="secondary" :disabled="submitting" @click="showModal = false">Cancel</AppButton>
-        <AppButton :loading="submitting" @click="submit">{{ editingEndpoint ? 'Save Changes' : 'Add Endpoint' }}
+        <AppButton :loading="submitting" :disabled="submitting || !isFormValid" @click="submit">{{ editingEndpoint ?
+          'Save Changes' : 'Add Endpoint' }}
         </AppButton>
       </template>
     </AppModal>

@@ -9,6 +9,11 @@ const isLoading = ref(false);
 const error = ref<string | null>(null);
 let fetched = false;
 
+// ── Search state ─────────────────────────────────────────────────────────────
+const searchResults: Ref<RegistryServer[]> = ref([]);
+const searchLoading = ref(false);
+const searchNextCursor = ref<string | null>(null);
+
 // ── Computed lookup maps ─────────────────────────────────────────────────────
 
 /** Map namespace → RegistryServer for O(1) lookups from tool names. */
@@ -39,6 +44,24 @@ async function load(): Promise<void> {
   }
 }
 
+async function searchServers(q: string, transport?: string): Promise<void> {
+  if (!q.trim()) {
+    searchResults.value = [];
+    searchNextCursor.value = null;
+    return;
+  }
+  searchLoading.value = true;
+  try {
+    const data = await registryApi.search(q, transport);
+    searchResults.value = data.servers;
+    searchNextCursor.value = data.nextCursor;
+  } catch {
+    searchResults.value = [];
+  } finally {
+    searchLoading.value = false;
+  }
+}
+
 // ── Public composable ────────────────────────────────────────────────────────
 
 export function useRegistry() {
@@ -51,6 +74,10 @@ export function useRegistry() {
     namespaceMap,
     isLoading,
     error,
+    searchResults,
+    searchLoading,
+    searchNextCursor,
+    searchServers,
     /** Force a cache-busting refresh */
     refresh: () => {
       fetched = false;

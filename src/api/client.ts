@@ -52,4 +52,14 @@ export const registryApi = {
     request<{ categories: string[]; servers: RegistryServer[]; count: number }>(
       "/registry/servers",
     ),
+  search: (q: string, transport?: string, cursor?: string) => {
+    const params = new URLSearchParams({ q });
+    if (transport && transport !== "all") params.set("transport", transport);
+    if (cursor) params.set("cursor", cursor);
+    return request<{
+      servers: RegistryServer[];
+      nextCursor: string | null;
+      count: number;
+    }>(`/registry/search?${params.toString()}`);
+  },
 };

@@ -126,6 +126,8 @@ export interface Tool {
   inputSchema: Record<string, unknown>;
   /** ID of the upstream MCP endpoint that provides this tool */
   endpointId?: string;
+  /** Whether the tool has been administratively disabled */
+  isDisabled?: boolean;
 }
 
 export interface UpstreamStatus {

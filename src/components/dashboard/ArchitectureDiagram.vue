@@ -194,7 +194,7 @@
             <span class="w-2 h-2 rounded-full shrink-0" :style="`background: ${statusColor(upstream.status)}`"></span>
             <!-- Namespace (truncated, no status text) -->
             <span class="text-xs font-medium truncate" style="color: var(--text-primary);">{{ upstream.namespace
-              }}</span>
+            }}</span>
             <!-- Tool count badge -->
             <span v-if="upstream.toolCount > 0" class="tool-badge shrink-0">{{ upstream.toolCount }}</span>
           </div>
@@ -272,7 +272,7 @@
               @click="toggleEndpointPanel($event, upstream)">
               <span class="w-2 h-2 rounded-full shrink-0" :style="`background: ${statusColor(upstream.status)}`"></span>
               <span class="text-xs font-medium truncate" style="color: var(--text-primary);">{{ upstream.namespace
-              }}</span>
+                }}</span>
               <span v-if="upstream.toolCount > 0" class="tool-badge shrink-0">{{ upstream.toolCount }}</span>
             </div>
             <!-- Empty state: agent registered but no endpoints assigned yet -->
@@ -355,10 +355,6 @@
       <div class="flex items-center gap-1.5">
         <span class="w-2.5 h-2.5 rounded-full bg-gray-400"></span>
         <span style="color: var(--text-secondary);">Disconnected</span>
-      </div>
-      <div class="flex items-center gap-1.5">
-        <span class="w-2.5 h-2.5 rounded-full" style="background: #8b5cf6;"></span>
-        <span style="color: var(--text-secondary);">Local Agent</span>
       </div>
       <div class="ml-auto text-[11px]" style="color: var(--text-tertiary);">
         AI client authenticates with the tenant API key. Each upstream server uses its own credentials.

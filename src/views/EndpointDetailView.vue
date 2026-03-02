@@ -81,6 +81,23 @@
   });
 
   const expandedTool = ref<string | null>(null);
+  const togglingTool = ref<string | null>(null);
+
+  async function toggleToolEnabled(tool: Tool) {
+    if (togglingTool.value) return;
+    togglingTool.value = tool.name;
+    try {
+      const event = tool.isDisabled ? 'enableTool' : 'disableTool';
+      const res = await emitTools<{ namespacedName: string; isDisabled: boolean; }>(event, {
+        namespacedName: tool.name,
+      });
+      if (res.status === 'success') {
+        tool.isDisabled = res.data!.isDisabled;
+      }
+    } finally {
+      togglingTool.value = null;
+    }
+  }
 
   function getNamespace(name: string): string {
     const idx = name.indexOf('__');
@@ -258,7 +275,8 @@
                 :style="`background: hsl(${nsHue(getNamespace(tool.name))} 70% 93%); color: hsl(${nsHue(getNamespace(tool.name))} 55% 38%);`">{{
                   getNamespace(tool.name) }}</span>
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-semibold leading-snug" style="color: var(--text-primary);">
+                <p class="text-sm font-semibold leading-snug"
+                  :style="tool.isDisabled ? 'color: var(--text-tertiary); text-decoration: line-through;' : 'color: var(--text-primary);'">
                   {{ getShortName(tool.name) }}
                 </p>
                 <p v-if="tool.description" class="text-xs mt-0.5 line-clamp-2 leading-relaxed"
@@ -266,9 +284,13 @@
                   }}</p>
               </div>
               <div class="shrink-0 flex items-center gap-2 mt-0.5">
+                <span v-if="tool.isDisabled" class="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
+                  style="background: rgba(239,68,68,.1); color: #ef4444;">disabled</span>
                 <span v-if="getParams(tool).length" class="text-[10px] font-medium px-1.5 py-0.5 rounded-md"
                   style="background: var(--bg-muted); color: var(--text-tertiary);">{{ getParams(tool).length }} param{{
                     getParams(tool).length !== 1 ? 's' : '' }}</span>
+                <AppToggle :model-value="!tool.isDisabled" :label="tool.isDisabled ? 'Enable' : 'Disable'"
+                  :disabled="togglingTool === tool.name" @update:model-value="toggleToolEnabled(tool)" @click.stop />
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                   class="transition-transform duration-200"
                   :style="expandedTool === tool.name ? 'transform: rotate(180deg); color: var(--color-primary, #6366f1);' : 'color: var(--text-tertiary);'">

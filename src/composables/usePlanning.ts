@@ -148,7 +148,7 @@ export function usePlanning() {
   async function generatePlan(
     userContent: string,
     baseSystemPrompt?: string,
-    onStreamToken?: (partial: string) => void,
+    onStreamToken?: (partial: string, thinking: string) => void,
     abortSignal?: AbortSignal,
   ): Promise<PlanningResult> {
     isPlanning.value = true;
@@ -188,10 +188,10 @@ export function usePlanning() {
         messages: planningHistory,
         tools: [], // No tool calls during planning — pure text response
         maxIterations: 1, // Planning is a single generation, no tool loops
-        onToken: (text) => {
+        onToken: (text, thinking) => {
           // text is cumulative (full content so far) — assign, don't append
           rawMarkdown = text;
-          onStreamToken?.(text);
+          onStreamToken?.(text, thinking);
         },
         onToolCall: async () => {
           // Should not happen (no tools provided), but guard anyway

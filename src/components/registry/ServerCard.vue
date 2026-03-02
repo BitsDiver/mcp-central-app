@@ -15,8 +15,11 @@
 
 <template>
   <div class="card p-4 flex gap-3 transition-all" :class="added ? '' : 'card-hover'">
-    <!-- Color icon -->
-    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold text-white shrink-0 mt-0.5"
+    <!-- Icon: remote image or colour+letters fallback -->
+    <img v-if="server.iconUrl" :src="server.iconUrl" alt=""
+      class="w-10 h-10 rounded-xl object-contain shrink-0 mt-0.5" />
+    <div v-else
+      class="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold text-white shrink-0 mt-0.5"
       :style="`background: ${server.color}`">
       {{ server.iconLetters }}
     </div>

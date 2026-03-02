@@ -213,7 +213,7 @@ export function useChatGeneration(
     const planMsg: ChatMessage = {
       id: planMsgId,
       role: "plan",
-      content: "Generating plan…",
+      content: "Waking up model\u2026",
       createdAt: new Date().toISOString(),
       isStreaming: true,
     };
@@ -224,11 +224,29 @@ export function useChatGeneration(
     const { plan, error: planError } = await planning.generatePlan(
       userContent,
       baseSystemPrompt,
-      (partial) => {
-        const partialPlan = parseMarkdownPlan(partial, true);
-        if (partialPlan) {
+      (partial, thinking) => {
+        if (partial) {
+          const partialPlan = parseMarkdownPlan(partial, true);
+          if (partialPlan) {
+            chatStore.updateMessage(sessionId, planMsgId, {
+              agentPlan: partialPlan,
+              thinking: thinking || undefined,
+              content: "Generating plan\u2026",
+              isStreaming: true,
+            });
+          } else {
+            // Text streaming but no ## task block yet
+            chatStore.updateMessage(sessionId, planMsgId, {
+              thinking: thinking || undefined,
+              content: "Generating plan\u2026",
+              isStreaming: true,
+            });
+          }
+        } else if (thinking) {
+          // Pure thinking phase — no plan text yet
           chatStore.updateMessage(sessionId, planMsgId, {
-            agentPlan: partialPlan,
+            thinking,
+            content: "Thinking\u2026",
             isStreaming: true,
           });
         }
@@ -294,7 +312,7 @@ export function useChatGeneration(
     const planMsg: ChatMessage = {
       id: planMsgId,
       role: "plan",
-      content: "Generating plan…",
+      content: "Waking up model\u2026",
       createdAt: new Date().toISOString(),
       isStreaming: true,
     };
@@ -306,17 +324,33 @@ export function useChatGeneration(
     const { plan, error: planError } = await planning.generatePlan(
       userContent,
       baseSystemPrompt,
-      (partial) => {
-        // Use stable IDs (streaming=true) so Vue's v-for keying never flickers
-        const partialPlan = parseMarkdownPlan(partial, true);
-        if (partialPlan) {
-          // At least one ## task visible: show the live PlanBlock
+      (partial, thinking) => {
+        if (partial) {
+          // Use stable IDs (streaming=true) so Vue's v-for keying never flickers
+          const partialPlan = parseMarkdownPlan(partial, true);
+          if (partialPlan) {
+            // At least one ## task visible: show the live PlanBlock
+            chatStore.updateMessage(sessionId, planMsgId, {
+              agentPlan: partialPlan,
+              thinking: thinking || undefined,
+              content: "Generating plan\u2026",
+              isStreaming: true,
+            });
+          } else {
+            chatStore.updateMessage(sessionId, planMsgId, {
+              thinking: thinking || undefined,
+              content: "Generating plan\u2026",
+              isStreaming: true,
+            });
+          }
+        } else if (thinking) {
+          // Pure thinking phase — plan text hasn't started yet
           chatStore.updateMessage(sessionId, planMsgId, {
-            agentPlan: partialPlan,
+            thinking,
+            content: "Thinking\u2026",
             isStreaming: true,
           });
         }
-        // Before first ##: message stays as isStreaming=true (dots already shown)
         scrollToBottom(false);
       },
     );

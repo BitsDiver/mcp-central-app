@@ -25,7 +25,9 @@ export interface RegistryServer {
   namespace: string;
   color: string;
   iconLetters: string;
+  iconUrl?: string;
   githubUrl?: string;
   tags?: string[];
   official?: boolean;
+  registryName?: string;
 }

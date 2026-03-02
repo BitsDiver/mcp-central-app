@@ -33,9 +33,27 @@ export const en: Record<string, Record<string, string>> = {
       "Both 'name' and 'namespace' fields are required.",
     ERR_ENDPOINT_CREATE_FAILED: "Failed to add the MCP endpoint.",
     ERR_ENDPOINT_NOT_FOUND: "MCP endpoint not found.",
+    ERR_ENDPOINT_NAMESPACE_DUPLICATE:
+      "An endpoint with this namespace already exists on this agent.",
+
+    // Resource limits
+    ERR_LIMIT_TENANTS_EXCEEDED:
+      "You have reached the maximum number of allowed tenants.",
+    ERR_LIMIT_AGENTS_EXCEEDED:
+      "Maximum number of local agents reached for this tenant.",
+    ERR_LIMIT_ENDPOINTS_EXCEEDED:
+      "Maximum number of endpoints reached for this tenant.",
+
+    // Agents
+    ERR_AGENT_NAME_REQUIRED: "Agent name is required.",
 
     // API keys
     ERR_KEY_NOT_FOUND: "API key not found.",
+
+    // Tools
+    ERR_TOOL_NOT_FOUND: "Tool not found.",
+    ERR_TOOL_FIELDS_REQUIRED: "'namespacedName' is required.",
+    ERR_TOOL_DISABLED: "This tool is currently disabled.",
 
     // Users
     ERR_USER_NOT_FOUND: "User not found.",
