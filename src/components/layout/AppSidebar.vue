@@ -21,7 +21,7 @@
     },
     {
       to: '/endpoints',
-      label: 'Endpoints',
+      label: 'MCP Servers',
       // Server rack (two rows)
       icon: 'M5 3a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H5zM3 13a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4zM8 7h.01M8 17h.01M12 7h2M12 17h2',
     },

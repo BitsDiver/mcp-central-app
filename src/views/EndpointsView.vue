@@ -18,6 +18,7 @@
   import { useEndpointStore } from '@/stores/endpoints';
   import { useAgentStore } from '@/stores/agents';
   import { useStatusStore } from '@/stores/status';
+  import { useToolStore } from '@/stores/tools';
   import { useError } from '@/composables/useError';
   import type { Endpoint, EndpointStatus, AgentWithStatus } from '@/types';
   import type { RegistryServer } from '@/data/mcpRegistry';
@@ -25,6 +26,7 @@
   const endpointStore = useEndpointStore();
   const agentStore = useAgentStore();
   const statusStore = useStatusStore();
+  const toolStore = useToolStore();
   const { resolveMessage, useFormErrors } = useError();
 
   onMounted(async () => {
@@ -37,6 +39,7 @@
   const search = ref('');
   const showModal = ref(false);
   const showRegistryModal = ref(false);
+  const pendingRegistryIcon = ref<{ iconLetters?: string; iconUrl?: string; iconColor?: string; } | null>(null);
   const showAgentModal = ref(false);
   const editingEndpoint = ref<Endpoint | null>(null);
   const submitting = ref(false);
@@ -151,6 +154,7 @@
 
   function openAdd() {
     editingEndpoint.value = null;
+    pendingRegistryIcon.value = null;
     form.value = { name: '', namespace: '', transport: 'streamable-http', url: '', command: '', args: '', headers: '', env: '', a2aApiKey: '', isEnabled: true, agentId: '' };
     clearErrors();
     showModal.value = true;
@@ -158,6 +162,11 @@
 
   function openFromRegistry(server: RegistryServer) {
     editingEndpoint.value = null;
+    pendingRegistryIcon.value = {
+      iconLetters: server.iconLetters,
+      iconUrl: server.iconUrl,
+      iconColor: server.color,
+    };
     form.value = {
       name: server.name,
       namespace: server.namespace,
@@ -253,11 +262,18 @@
         payload.env = parseEnvLines(form.value.env);
       }
       if (form.value.agentId) payload.agentId = form.value.agentId;
+      if (!editingEndpoint.value && pendingRegistryIcon.value) {
+        const icon = pendingRegistryIcon.value;
+        if (icon.iconLetters) payload.iconLetters = icon.iconLetters;
+        if (icon.iconUrl) payload.iconUrl = icon.iconUrl;
+        if (icon.iconColor) payload.iconColor = icon.iconColor;
+      }
       if (editingEndpoint.value) {
         await endpointStore.update(editingEndpoint.value.id, payload);
       } else {
         await endpointStore.create(payload);
       }
+      pendingRegistryIcon.value = null;
       showModal.value = false;
     } catch (err) {
       setFromApiError(err);
@@ -322,7 +338,7 @@
     <div class="px-4 md:px-6 lg:px-8 py-6 max-w-7xl mx-auto">
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h1 class="text-xl font-semibold" style="color: var(--text-primary);">MCP Endpoints</h1>
+          <h1 class="text-xl font-semibold" style="color: var(--text-primary);">MCP Servers</h1>
           <p class="text-sm mt-1" style="color: var(--text-secondary);">Manage your upstream MCP servers</p>
         </div>
         <div class="flex items-center gap-2">
@@ -346,13 +362,13 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <path d="M12 5v14M5 12h14" />
             </svg>
-            Add Endpoint
+            Add MCP Server
           </AppButton>
         </div>
       </div>
 
       <div class="mb-4">
-        <input v-model="search" type="search" placeholder="Search endpoints…"
+        <input v-model="search" type="search" placeholder="Search MCP servers…"
           class="w-full max-w-xs px-3 py-2 text-sm rounded-lg border outline-none transition-colors"
           style="background: var(--bg-input); color: var(--text-primary); border-color: var(--border-default);"
           :onfocus="(e: FocusEvent) => (e.target as HTMLElement).style.borderColor = 'var(--border-focus)'"
@@ -393,7 +409,7 @@
               </div>
               <div class="flex items-center gap-1 shrink-0" @click.stop>
                 <span class="text-xs" style="color: var(--text-tertiary);">{{ agentEndpoints(agent.id).length }}
-                  endpoint{{ agentEndpoints(agent.id).length !== 1 ? 's' : '' }}</span>
+                  MCP server{{ agentEndpoints(agent.id).length > 1 ? 's' : '' }}</span>
                 <AppButton variant="ghost" size="sm" title="Edit agent" @click="editingAgent = agent">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
@@ -413,19 +429,27 @@
             <div v-if="!collapsedAgents.has(agent.id)" class="border-t" style="border-color: var(--border-default);">
               <div v-if="agentEndpoints(agent.id).length === 0" class="px-4 py-3 text-sm"
                 style="color: var(--text-tertiary);">
-                No endpoints assigned to this agent yet. Add an endpoint and select this agent as the tunnel.
+                No MCP server assigned to this agent yet. Add an MCP server and select this agent as the tunnel.
               </div>
               <div v-for="ep in agentEndpoints(agent.id)" :key="ep.id"
                 class="flex items-center gap-3 px-4 py-3 border-b last:border-b-0 hover:bg-[var(--bg-hover)] transition-colors"
                 style="border-color: var(--border-default);">
-                <div class="flex-1 min-w-0">
+                <div class="flex-1 min-w-0 flex items-center gap-2">
+                  <span v-if="ep.iconLetters || ep.iconUrl"
+                    class="w-5 h-5 rounded flex items-center justify-center shrink-0 text-[8px] font-bold overflow-hidden"
+                    :style="`background: ${ep.iconColor ?? 'var(--bg-muted)'}`">
+                    <img v-if="ep.iconUrl" :src="ep.iconUrl" class="w-full h-full object-cover"
+                      :alt="ep.iconLetters ?? ''" />
+                    <span v-else style="color: white;">{{ ep.iconLetters }}</span>
+                  </span>
                   <router-link :to="`/endpoints/${ep.id}`" class="font-medium text-sm text-blue-500 hover:underline">{{
                     ep.name }}</router-link>
-                  <code class="ml-2 text-[11px] px-1 py-0.5 rounded font-mono"
+                  <code class="ml-1 text-[11px] px-1 py-0.5 rounded font-mono"
                     style="background: var(--bg-muted); color: var(--text-secondary);">{{ ep.namespace }}</code>
                 </div>
                 <StatusBadge :status="getUpstreamStatus(ep.id)" />
-                <span class="text-xs hidden sm:inline" style="color: var(--text-tertiary);">{{ ep.toolCount }}
+                <span class="text-xs hidden sm:inline" style="color: var(--text-tertiary);">
+                  {{ toolStore.getActiveCountForEndpoint(ep.id) }}/{{ toolStore.getTotalCountForEndpoint(ep.id) }}
                   tools</span>
                 <AppToggle :model-value="ep.isEnabled" @update:model-value="toggle(ep)" />
                 <div class="flex items-center gap-1">
@@ -477,7 +501,7 @@
         </template>
         <div v-if="!search" class="flex items-center gap-2">
           <AppButton size="sm" variant="secondary" @click="showRegistryModal = true">Browse Registry</AppButton>
-          <AppButton size="sm" @click="openAdd">Add Endpoint</AppButton>
+          <AppButton size="sm" @click="openAdd">Add MCP Server</AppButton>
         </div>
       </EmptyState>
 
@@ -504,8 +528,18 @@
             <tbody class="divide-y" style="border-color: var(--border-default);">
               <tr v-for="ep in filtered" :key="ep.id" class="transition-colors hover:bg-[var(--bg-hover)]">
                 <td class="px-5 py-3">
-                  <router-link :to="`/endpoints/${ep.id}`" class="font-medium text-blue-500 hover:underline">{{ ep.name
-                    }}</router-link>
+                  <div class="flex items-center gap-2">
+                    <span v-if="ep.iconLetters || ep.iconUrl"
+                      class="w-6 h-6 rounded flex items-center justify-center shrink-0 text-[9px] font-bold overflow-hidden"
+                      :style="`background: ${ep.iconColor ?? 'var(--bg-muted)'}`">
+                      <img v-if="ep.iconUrl" :src="ep.iconUrl" class="w-full h-full object-cover"
+                        :alt="ep.iconLetters || 'MCP Server Icon'" />
+                      <span v-else style="color: white;">{{ ep.iconLetters }}</span>
+                    </span>
+                    <router-link :to="`/endpoints/${ep.id}`" class="font-medium text-blue-500 hover:underline">{{
+                      ep.name
+                      }}</router-link>
+                  </div>
                 </td>
                 <td class="px-5 py-3 hidden sm:table-cell">
                   <code class="text-xs px-1.5 py-0.5 rounded font-mono"
@@ -515,7 +549,8 @@
                 <td class="px-5 py-3">
                   <StatusBadge :status="getUpstreamStatus(ep.id)" />
                 </td>
-                <td class="px-5 py-3 hidden lg:table-cell" style="color: var(--text-primary);">{{ ep.toolCount }}</td>
+                <td class="px-5 py-3 hidden lg:table-cell" style="color: var(--text-primary);">{{
+                  toolStore.getActiveCountForEndpoint(ep.id) }}/{{ toolStore.getTotalCountForEndpoint(ep.id) }}</td>
                 <td class="px-5 py-3">
                   <AppToggle :model-value="ep.isEnabled" @update:model-value="toggle(ep)" />
                 </td>
@@ -552,7 +587,7 @@
       </div>
     </div>
 
-    <AppModal :open="showModal" :title="editingEndpoint ? 'Edit Endpoint' : 'Add Endpoint'" size="lg"
+    <AppModal :open="showModal" :title="editingEndpoint ? 'Edit MCP Server' : 'Add MCP Server'" size="lg"
       :closable="!submitting" @close="showModal = false">
       <form @submit.prevent="submit" class="flex flex-col gap-4">
         <AppAlert v-if="globalError" :message="globalError" type="error" />
@@ -602,12 +637,12 @@
       <template #footer>
         <AppButton variant="secondary" :disabled="submitting" @click="showModal = false">Cancel</AppButton>
         <AppButton :loading="submitting" :disabled="submitting || !isFormValid" @click="submit">{{ editingEndpoint ?
-          'Save Changes' : 'Add Endpoint' }}
+          'Save Changes' : 'Add MCP Server' }}
         </AppButton>
       </template>
     </AppModal>
 
-    <ConfirmDialog :open="!!deleteTarget" title="Remove Endpoint"
+    <ConfirmDialog :open="!!deleteTarget" title="Remove MCP Server"
       :message="`Remove '${deleteTarget?.name}'? This will disconnect the upstream server.`" confirm-label="Remove"
       :loading="deleting" @confirm="confirmDelete" @cancel="deleteTarget = null" />
 
@@ -616,7 +651,7 @@
     <EditAgentModal :open="!!editingAgent" :agent="editingAgent" @close="editingAgent = null" />
 
     <ConfirmDialog :open="!!agentDeleteTarget" title="Remove Agent"
-      :message="`Remove agent '${agentDeleteTarget?.name}'? This will permanently delete the agent and all endpoints assigned to it.`"
+      :message="`Remove agent '${agentDeleteTarget?.name}'? This will permanently delete the agent and all MCP Servers assigned to it.`"
       confirm-label="Remove Agent" :loading="agentDeleting" @confirm="confirmDeleteAgent"
       @cancel="agentDeleteTarget = null" />
   </AppLayout>

@@ -1,9 +1,13 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue';
+  import AppToggle from '@/components/ui/AppToggle.vue';
+  import AddAgentModal from '@/components/endpoints/AddAgentModal.vue';
   import { useStatusStore } from '@/stores/status';
   import { useToolStore } from '@/stores/tools';
   import { useEndpointStore } from '@/stores/endpoints';
   import { useAgentStore } from '@/stores/agents';
+  import { emitTools } from '@/api/socket';
+  import type { Tool } from '@/types';
 
   const statusStore = useStatusStore();
   const toolStore = useToolStore();
@@ -29,14 +33,14 @@
     });
   });
 
-  /** Map endpointId → list of tool originalNames for hover tooltips */
+  /** Map endpointId → list of Tool objects for the panel */
   const toolsByEndpoint = computed(() => {
-    const map: Record<string, string[]> = {};
+    const map: Record<string, Tool[]> = {};
     for (const t of toolStore.tools) {
       const id = t.endpointId;
       if (id) {
         if (!map[id]) map[id] = [];
-        map[id].push(t.originalName ?? t.name);
+        map[id].push(t);
       }
     }
     return map;
@@ -53,7 +57,29 @@
   type UpstreamRow = (typeof directUpstreams.value)[number];
   const activeEndpoint = ref<UpstreamRow | null>(null);
   const tooltipPos = ref({ x: 0, y: 0 });
-  const TOOLTIP_W = 232;   // 224px width + 8px gap
+  const TOOLTIP_W = 308;   // 300px width + 8px gap
+
+  const togglingToolName = ref<string | null>(null);
+  const showAgentModal = ref(false);
+
+  async function toggleArchTool(tool: Tool) {
+    if (togglingToolName.value) return;
+    togglingToolName.value = tool.name;
+    try {
+      const event = tool.isDisabled ? 'enableTool' : 'disableTool';
+      const res = await emitTools<{ namespacedName: string; isDisabled: boolean; }>(event, {
+        namespacedName: tool.name,
+      });
+      if (res.status === 'success') {
+        // Patch the reactive toolStore entry so all views update
+        const stored = toolStore.tools.find((t) => t.name === tool.name);
+        if (stored) stored.isDisabled = res.data!.isDisabled;
+        tool.isDisabled = res.data!.isDisabled;
+      }
+    } finally {
+      togglingToolName.value = null;
+    }
+  }
 
   function toggleEndpointPanel(e: MouseEvent, upstream: UpstreamRow) {
     // No tools at all → nothing to show
@@ -155,8 +181,9 @@
 
       <!-- Node: central-MCP -->
       <div class="arch-node">
-        <div class="arch-node-icon relative"
-          style="background: rgba(59,130,246,0.1); border-color: #3b82f6; width: 4rem; height: 4rem;">
+        <div class="arch-node-icon relative cursor-pointer"
+          style="background: rgba(59,130,246,0.1); border-color: #3b82f6; width: 4rem; height: 4rem;"
+          title="Add local agent" @click="showAgentModal = true">
           <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.75">
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
@@ -194,20 +221,24 @@
             <span class="w-2 h-2 rounded-full shrink-0" :style="`background: ${statusColor(upstream.status)}`"></span>
             <!-- Namespace (truncated, no status text) -->
             <span class="text-xs font-medium truncate" style="color: var(--text-primary);">{{ upstream.namespace
-            }}</span>
+              }}</span>
             <!-- Tool count badge -->
-            <span v-if="upstream.toolCount > 0" class="tool-badge shrink-0">{{ upstream.toolCount }}</span>
+            <span v-if="upstream.toolCount > 0" class="tool-badge shrink-0"
+              :style="toolStore.getActiveCountForEndpoint(upstream.endpointId) < toolStore.getTotalCountForEndpoint(upstream.endpointId) ? 'background: rgba(245,158,11,.12); color: #d97706;' : ''">
+              {{ toolStore.getActiveCountForEndpoint(upstream.endpointId) }}/{{
+                toolStore.getTotalCountForEndpoint(upstream.endpointId) }}
+            </span>
           </div>
 
-          <!-- Empty state: no direct endpoints yet -->
-          <router-link v-if="directUpstreams.length === 0" to="/endpoints" class="endpoint-row border-dashed"
+          <!-- Empty state / always-visible Add endpoint row -->
+          <router-link to="/endpoints" class="endpoint-row border-dashed"
             style="border-color: var(--border-default); text-decoration: none;">
             <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" style="color: var(--text-tertiary); flex-shrink: 0;">
               <line x1="7" y1="1" x2="7" y2="13" />
               <line x1="1" y1="7" x2="13" y2="7" />
             </svg>
-            <span class="text-xs" style="color: var(--text-tertiary);">Add endpoint</span>
+            <span class="text-xs" style="color: var(--text-tertiary);">Add MCP Server</span>
           </router-link>
         </div>
 
@@ -272,18 +303,22 @@
               @click="toggleEndpointPanel($event, upstream)">
               <span class="w-2 h-2 rounded-full shrink-0" :style="`background: ${statusColor(upstream.status)}`"></span>
               <span class="text-xs font-medium truncate" style="color: var(--text-primary);">{{ upstream.namespace
-                }}</span>
-              <span v-if="upstream.toolCount > 0" class="tool-badge shrink-0">{{ upstream.toolCount }}</span>
+              }}</span>
+              <span v-if="upstream.toolCount > 0" class="tool-badge shrink-0"
+                :style="toolStore.getActiveCountForEndpoint(upstream.endpointId) < toolStore.getTotalCountForEndpoint(upstream.endpointId) ? 'background: rgba(245,158,11,.12); color: #d97706;' : ''">
+                {{ toolStore.getActiveCountForEndpoint(upstream.endpointId) }}/{{
+                  toolStore.getTotalCountForEndpoint(upstream.endpointId) }}
+              </span>
             </div>
-            <!-- Empty state: agent registered but no endpoints assigned yet -->
-            <router-link v-if="cluster.agentEpIds.size === 0" to="/endpoints" class="endpoint-row border-dashed"
+            <!-- Always-visible Add endpoint row for this agent -->
+            <router-link to="/endpoints" class="endpoint-row border-dashed"
               style="border-color: rgba(139,92,246,0.3); text-decoration: none;">
               <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="#8b5cf6" stroke-width="2"
                 stroke-linecap="round" style="flex-shrink: 0;">
                 <line x1="7" y1="1" x2="7" y2="13" />
                 <line x1="1" y1="7" x2="13" y2="7" />
               </svg>
-              <span class="text-xs" style="color: #8b5cf6;">Add endpoint</span>
+              <span class="text-xs" style="color: #8b5cf6;">Add MCP Server</span>
             </router-link>
           </div>
           <p v-if="cluster.upstreams.length > 5" class="overflow-hint" style="color: var(--text-tertiary);">
@@ -314,8 +349,8 @@
                 stroke-linecap="round" stroke-linejoin="round" />
             </svg>
             <span class="truncate">{{ activeEndpoint.namespace }}</span>
-            <span class="tool-badge ml-1 shrink-0">{{ toolsByEndpoint[activeEndpoint.endpointId]?.length ??
-              activeEndpoint.toolCount }}</span>
+            <span class="tool-badge ml-1 shrink-0">{{ toolStore.getActiveCountForEndpoint(activeEndpoint.endpointId)
+              }}/{{ toolStore.getTotalCountForEndpoint(activeEndpoint.endpointId) || activeEndpoint.toolCount }}</span>
             <button class="ml-auto shrink-0 opacity-50 hover:opacity-100 transition-opacity"
               style="color: var(--text-primary);" @click.stop="closePanel">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -326,8 +361,17 @@
           <!-- Full scrollable list -->
           <ul v-if="toolsByEndpoint[activeEndpoint.endpointId]?.length" class="endpoint-tooltip-list"
             style="background: var(--bg-overlay);">
-            <li v-for="tool in toolsByEndpoint[activeEndpoint.endpointId]" :key="tool" class="endpoint-tooltip-item">{{
-              tool }}</li>
+            <li v-for="tool in toolsByEndpoint[activeEndpoint.endpointId]" :key="tool.name"
+              class="endpoint-tooltip-item flex items-center gap-2" :style="tool.isDisabled ? 'opacity: 0.55;' : ''">
+              <span class="flex-1 truncate text-xs"
+                :style="tool.isDisabled ? 'text-decoration: line-through; color: var(--text-tertiary);' : 'color: var(--text-primary);'">
+                {{ tool.originalName ?? tool.name }}
+              </span>
+              <span v-if="tool.isDisabled" class="text-[9px] font-semibold px-1 py-0.5 rounded shrink-0"
+                style="background: rgba(239,68,68,.1); color: #ef4444;">off</span>
+              <AppToggle :model-value="!tool.isDisabled" :disabled="togglingToolName === tool.name"
+                @update:model-value="toggleArchTool(tool)" @click.stop />
+            </li>
           </ul>
           <!-- Placeholder when tools not yet fetched -->
           <p v-else class="px-3 py-2 text-xs"
@@ -357,10 +401,12 @@
         <span style="color: var(--text-secondary);">Disconnected</span>
       </div>
       <div class="ml-auto text-[11px]" style="color: var(--text-tertiary);">
-        AI client authenticates with the tenant API key. Each upstream server uses its own credentials.
+        AI client authenticates with the tenant API key. Each MCP server should use its own credentials.
       </div>
     </div>
   </div>
+
+  <AddAgentModal :open="showAgentModal" @close="showAgentModal = false" />
 </template>
 
 <style scoped>
@@ -661,7 +707,7 @@
 
   /* ── Teleport floating panel ────────────────────────────── */
   .endpoint-tooltip-float {
-    width: 224px;
+    width: 300px;
     border-radius: 10px;
     border: 1px solid var(--border-default);
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
@@ -787,7 +833,7 @@
     align-items: center;
     gap: 0;
     padding: 6px 0;
-    border-top: 1px solid rgba(139, 92, 246, 0.12);
+    /* border-top: 1px solid rgba(139, 92, 246, 0.12); */
   }
 
   .agent-tunnel-row:first-of-type {

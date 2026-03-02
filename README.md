@@ -2,7 +2,7 @@
 
 # 🖥️ MCP Central App
 
-**Frontend SPA for [MCP Central](https://github.com/your-org/mcp-central)** — manage your MCP proxy, endpoints, API keys, and chat with any LLM from your browser.
+**Frontend SPA for [MCP Central](https://github.com/BitsDiver/mcp-central)** — manage your MCP proxy, endpoints, API keys, and chat with any LLM from your browser.
 
 [![Vue 3](https://img.shields.io/badge/Vue-3.x-42b883?logo=vue.js&logoColor=white)](https://vuejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)

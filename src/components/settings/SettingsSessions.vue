@@ -1,6 +1,6 @@
 <script setup lang="ts">
-    import { ref, computed, onMounted } from 'vue';
-    import { emitAgent } from '@/api/socket';
+    import { ref, computed, onMounted, onUnmounted } from 'vue';
+    import { emitAgent, getSocket } from '@/api/socket';
     import SkeletonBlock from '@/components/ui/SkeletonBlock.vue';
     import StatusBadge from '@/components/ui/StatusBadge.vue';
 
@@ -101,6 +101,52 @@
     }
 
     onMounted(load);
+
+    // Real-time agent connection status
+    function onAgentConnected(data: { agentId: string; }) {
+        const s = agentSessions.value.find((a) => a.id === data.agentId);
+        if (s) s.isConnected = true;
+    }
+    function onAgentDisconnected(data: { agentId: string; }) {
+        const s = agentSessions.value.find((a) => a.id === data.agentId);
+        if (s) s.isConnected = false;
+    }
+    onMounted(() => {
+        const sock = getSocket('agent');
+        sock?.on('agent_connected', onAgentConnected);
+        sock?.on('agent_disconnected', onAgentDisconnected);
+    });
+    onUnmounted(() => {
+        const sock = getSocket('agent');
+        sock?.off('agent_connected', onAgentConnected);
+        sock?.off('agent_disconnected', onAgentDisconnected);
+    });
+
+    const kicking = ref(new Set<string>());
+
+    async function kickBrowserSession(socketId: string) {
+        kicking.value = new Set(kicking.value).add(socketId);
+        try {
+            await emitAgent('kickSession', { type: 'browser', socketId });
+            rawBrowserSessions.value = rawBrowserSessions.value.filter((s) => s.socketId !== socketId);
+        } finally {
+            const next = new Set(kicking.value);
+            next.delete(socketId);
+            kicking.value = next;
+        }
+    }
+
+    async function kickAgentSession(agentId: string) {
+        kicking.value = new Set(kicking.value).add(agentId);
+        try {
+            await emitAgent('kickSession', { type: 'agent', agentId });
+            await load();
+        } finally {
+            const next = new Set(kicking.value);
+            next.delete(agentId);
+            kicking.value = next;
+        }
+    }
 </script>
 
 <template>
@@ -176,12 +222,18 @@
                         <p v-if="group.email && group.name" class="text-xs" style="color: var(--text-secondary);">
                             {{ group.email }}
                         </p>
-                        <!-- Namespace badges -->
+                        <!-- Namespace badges with disconnect -->
                         <div class="flex flex-wrap gap-1 mt-1.5">
                             <span v-for="s in group.sessions" :key="s.socketId"
-                                class="text-[10px] font-mono px-1.5 py-0.5 rounded-md"
+                                class="inline-flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded-md"
                                 style="background: var(--bg-muted); color: var(--text-tertiary);">
                                 /{{ nsLabel(s.namespace) }}
+                                <button :disabled="kicking.has(s.socketId)" @click.stop="kickBrowserSession(s.socketId)"
+                                    title="Disconnect — will reconnect automatically"
+                                    class="ml-0.5 leading-none opacity-50 hover:opacity-100 disabled:opacity-30 transition-opacity"
+                                    style="color: #ef4444;">
+                                    {{ kicking.has(s.socketId) ? '…' : '×' }}
+                                </button>
                             </span>
                         </div>
                     </div>
@@ -269,6 +321,12 @@
                         <p v-if="agent.lastSeenAt" class="text-[10px] mt-1" style="color: var(--text-tertiary);">
                             {{ formatDate(agent.lastSeenAt) }}
                         </p>
+                        <button v-if="agent.isConnected" :disabled="kicking.has(agent.id)"
+                            @click="kickAgentSession(agent.id)" title="Disconnect — will reconnect automatically"
+                            class="mt-1.5 text-[10px] px-2 py-0.5 rounded border transition-colors disabled:opacity-40"
+                            style="border-color: #ef444466; color: #ef4444; background: rgba(239,68,68,.06);">
+                            {{ kicking.has(agent.id) ? '…' : 'Disconnect' }}
+                        </button>
                     </div>
                 </div>
             </div>

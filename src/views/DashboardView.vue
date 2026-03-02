@@ -50,21 +50,21 @@
 
   const stats = computed(() => [
     {
-      label: 'Total Tools',
-      value: toolStore.count,
+      label: 'Active Tools',
+      value: `${toolStore.tools.filter(t => !t.isDisabled).length} / ${toolStore.count}`,
       icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
       color: 'text-blue-500',
       darkBg: 'rgba(59,130,246,0.12)',
     },
     {
-      label: 'Connected Upstreams',
+      label: 'Connected MCP Servers',
       value: statusStore.connectedCount,
       icon: 'M5 12h14M12 5l7 7-7 7',
       color: 'text-green-500',
       darkBg: 'rgba(34,197,94,0.12)',
     },
     {
-      label: 'Total Upstreams',
+      label: 'Total MCP Servers',
       value: statusStore.upstreams.length,
       icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10',
       color: 'text-amber-500',
@@ -125,7 +125,7 @@
 
       <div class="card overflow-hidden">
         <div class="px-5 py-4 border-b flex items-center justify-between" style="border-color: var(--border-default);">
-          <h2 class="text-sm font-semibold" style="color: var(--text-primary);">Endpoints Status</h2>
+          <h2 class="text-sm font-semibold" style="color: var(--text-primary);">MCP Servers Status</h2>
           <span class="badge badge-neutral text-xs">{{ statusStore.upstreams.length }} servers</span>
         </div>
 
@@ -138,7 +138,7 @@
         </div>
 
         <div v-else-if="statusStore.upstreams.length === 0" class="py-12 text-center">
-          <p class="text-sm" style="color: var(--text-tertiary);">No upstream servers configured.</p>
+          <p class="text-sm" style="color: var(--text-tertiary);">No MCP servers configured.</p>
           <router-link to="/registry" class="text-sm text-blue-500 hover:underline mt-1 inline-block">Browse the
             registry to
             add servers →</router-link>
@@ -183,7 +183,9 @@
             </div>
             <StatusBadge v-else :status="(upstream.status as EndpointStatus)" />
             <div class="text-right shrink-0">
-              <p class="text-sm font-medium" style="color: var(--text-primary);">{{ upstream.toolCount }}</p>
+              <p class="text-sm font-medium" style="color: var(--text-primary);">{{
+                toolStore.getActiveCountForEndpoint(upstream.endpointId) }}/{{
+                  toolStore.getTotalCountForEndpoint(upstream.endpointId) }}</p>
               <p class="text-xs" style="color: var(--text-tertiary);">tools</p>
             </div>
           </div>

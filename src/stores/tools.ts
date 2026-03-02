@@ -105,6 +105,16 @@ export const useToolStore = defineStore("tools", () => {
     persistDisabled(next);
   }
 
+  function getActiveCountForEndpoint(endpointId: string): number {
+    return tools.value.filter(
+      (t) => t.endpointId === endpointId && !t.isDisabled,
+    ).length;
+  }
+
+  function getTotalCountForEndpoint(endpointId: string): number {
+    return tools.value.filter((t) => t.endpointId === endpointId).length;
+  }
+
   return {
     tools,
     count,
@@ -119,5 +129,7 @@ export const useToolStore = defineStore("tools", () => {
     toggleTool,
     isEndpointFullyEnabled,
     toggleEndpoint,
+    getActiveCountForEndpoint,
+    getTotalCountForEndpoint,
   };
 });

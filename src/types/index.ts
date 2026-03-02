@@ -78,6 +78,10 @@ export interface Endpoint {
   headers: Record<string, string>;
   isEnabled: boolean;
   toolCount: number;
+  /** Icon metadata sourced from the registry */
+  iconLetters?: string | null;
+  iconUrl?: string | null;
+  iconColor?: string | null;
   /** If set, this endpoint is tunnelled through a local agent process */
   agentId: string | null;
   /** Live connection status pushed by connection_status socket event */
