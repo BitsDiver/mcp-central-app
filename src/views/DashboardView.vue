@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, onMounted, ref, markRaw, type Component } from 'vue';
   import AppLayout from '@/components/layout/AppLayout.vue';
   import ArchitectureDiagram from '@/components/dashboard/ArchitectureDiagram.vue';
   import AIClientInstallButton from '@/components/dashboard/AIClientInstallButton.vue';
@@ -12,6 +12,7 @@
   import StatusBadge from '@/components/ui/StatusBadge.vue';
   import SkeletonBlock from '@/components/ui/SkeletonBlock.vue';
   import type { EndpointStatus, UpstreamStatus } from '@/types';
+  import { FlaskConical, ArrowRight, Server, Link, Router, Home } from 'lucide-vue-next';
 
   const statusStore = useStatusStore();
   const toolStore = useToolStore();
@@ -52,28 +53,28 @@
     {
       label: 'Active Tools',
       value: `${toolStore.tools.filter(t => !t.isDisabled).length} / ${toolStore.count}`,
-      icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
+      icon: markRaw(FlaskConical) as Component,
       color: 'text-blue-500',
       darkBg: 'rgba(59,130,246,0.12)',
     },
     {
       label: 'Connected MCP Servers',
       value: statusStore.connectedCount,
-      icon: 'M5 12h14M12 5l7 7-7 7',
+      icon: markRaw(ArrowRight) as Component,
       color: 'text-green-500',
       darkBg: 'rgba(34,197,94,0.12)',
     },
     {
       label: 'Total MCP Servers',
       value: statusStore.upstreams.length,
-      icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10',
+      icon: markRaw(Server) as Component,
       color: 'text-amber-500',
       darkBg: 'rgba(245,158,11,0.12)',
     },
     {
       label: 'Local Agents',
       value: agentStore.agents.length,
-      icon: 'M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18',
+      icon: markRaw(Router) as Component,
       color: 'text-purple-500',
       darkBg: 'rgba(139,92,246,0.12)',
     },
@@ -87,7 +88,10 @@
     <div class="px-4 md:px-6 lg:px-8 py-6 max-w-7xl mx-auto">
       <div class="flex items-center justify-between mb-6 gap-4">
         <div>
-          <h1 class="text-xl font-semibold" style="color: var(--text-primary);">Dashboard</h1>
+          <h1 class="text-xl font-semibold flex items-center gap-2" style="color: var(--text-primary);">
+            <Home :size="20" :stroke-width="2" />
+            Dashboard
+          </h1>
           <p class="text-sm mt-1" style="color: var(--text-secondary);">
             {{ tenantStore.selectedTenant?.name ?? 'No tenant selected' }}
           </p>
@@ -106,10 +110,7 @@
           <div v-for="stat in stats" :key="stat.label" class="card p-5 flex items-start gap-4">
             <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
               :style="`background: ${stat.darkBg}`">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
-                :class="stat.color">
-                <path :d="stat.icon" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
+              <component :is="stat.icon" :size="20" :stroke-width="1.75" :class="stat.color" />
             </div>
             <div>
               <p class="text-xs font-medium" style="color: var(--text-tertiary);">{{ stat.label }}</p>
@@ -156,13 +157,7 @@
               </div>
               <div v-else class="w-7 h-7 rounded-md flex items-center justify-center"
                 style="background: var(--bg-muted); border: 1px solid var(--border-default);">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
-                  style="color: var(--text-tertiary);">
-                  <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke-linecap="round"
-                    stroke-linejoin="round" />
-                  <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke-linecap="round"
-                    stroke-linejoin="round" />
-                </svg>
+                <Link :size="14" :stroke-width="1.75" style="color: var(--text-tertiary);" />
               </div>
             </div>
             <div class="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
@@ -170,10 +165,7 @@
               <span v-if="getAgentForEndpoint(upstream.endpointId)"
                 class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0"
                 style="background: rgba(139,92,246,0.12); color: #7c3aed; border: 1px solid rgba(139,92,246,0.25);">
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="2" y="3" width="20" height="14" rx="2" />
-                  <path d="M8 21h8M12 17v4" />
-                </svg>
+                <Monitor :size="9" :stroke-width="2" />
                 {{ getAgentForEndpoint(upstream.endpointId)!.name }}
               </span>
             </div>

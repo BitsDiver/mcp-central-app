@@ -9,7 +9,9 @@
   import ToolList from '@/components/tools/ToolList.vue';
   import { useEndpointStore } from '@/stores/endpoints';
   import { useStatusStore } from '@/stores/status';
+
   import type { EndpointStatus } from '@/types';
+  import { ChevronRight, Link, Trash2 } from 'lucide-vue-next';
 
   const route = useRoute();
   const router = useRouter();
@@ -61,10 +63,7 @@
       <div class="flex items-center gap-2 mb-6">
         <router-link to="/endpoints" class="text-sm hover:underline"
           style="color: var(--text-secondary);">Endpoints</router-link>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-          style="color: var(--text-tertiary);">
-          <path d="M9 18l6-6-6-6" />
-        </svg>
+        <ChevronRight :size="14" :stroke-width="2" style="color: var(--text-tertiary);" />
         <span class="text-sm font-medium" style="color: var(--text-primary);">{{ endpoint?.name ?? 'Loading…' }}</span>
       </div>
 
@@ -83,10 +82,19 @@
                 <!-- Registry icon chip -->
                 <span v-if="endpoint.iconLetters || endpoint.iconUrl"
                   class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold overflow-hidden"
-                  :style="`background: ${endpoint.iconColor ?? 'var(--bg-muted)'}`">
+                  :style="{
+                    background: endpoint.iconUrl ? 'transparent' : 'var(--bg-muted)',
+                    border: endpoint.iconUrl ? 'none' : '1px solid var(--border-default)',
+                    color: endpoint.iconUrl ? 'transparent' : 'var(--text-secondary)',
+                  }">
                   <img v-if="endpoint.iconUrl" :src="endpoint.iconUrl" class="w-full h-full object-cover"
                     :alt="endpoint.iconLetters ?? ''" />
                   <span v-else style="color: white;">{{ endpoint.iconLetters }}</span>
+                </span>
+                <!-- Fallback: muted chip with link icon -->
+                <span v-else class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                  style="background: var(--bg-muted); border: 1px solid var(--border-default);">
+                  <Link :size="18" :stroke-width="1.75" style="color: var(--text-tertiary);" />
                 </span>
                 <h1 class="text-xl font-semibold" style="color: var(--text-primary);">{{ endpoint.name }}</h1>
               </div>
@@ -116,9 +124,7 @@
               <AppToggle :model-value="endpoint.isEnabled" @update:model-value="handleToggle"
                 :label="endpoint.isEnabled ? 'Enabled' : 'Disabled'" />
               <AppButton variant="danger" size="sm" @click="showDeleteDialog = true">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 6h18M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                </svg>
+                <Trash2 :size="14" :stroke-width="2" />
                 Remove
               </AppButton>
             </div>

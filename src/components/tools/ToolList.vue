@@ -6,6 +6,7 @@
     import { useToolStore } from '@/stores/tools';
     import { emitTools } from '@/api/socket';
     import type { Tool } from '@/types';
+    import { Search, Settings, ChevronDown } from 'lucide-vue-next';
 
     const props = withDefaults(defineProps<{
         /** If supplied, fetches only this endpoint's tools and enables per-tool toggles. */
@@ -188,12 +189,9 @@
         <!-- Search + namespace filters -->
         <div class="flex flex-col sm:flex-row gap-3 mb-4">
             <div class="relative flex-1 max-w-sm">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                <Search :size="14" :stroke-width="2"
                     class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                    style="color: var(--text-tertiary);">
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="M21 21l-4.35-4.35" />
-                </svg>
+                    style="color: var(--text-tertiary);" />
                 <input v-model="search" type="search" placeholder="Search tools…"
                     class="w-full pl-8 pr-3 py-2 text-sm rounded-lg border outline-none transition-colors"
                     style="background: var(--bg-input); color: var(--text-primary); border-color: var(--border-default);" />
@@ -236,13 +234,7 @@
         <EmptyState v-else-if="filtered.length === 0" title="No tools found"
             :description="search || selectedNamespace ? 'Try adjusting your filters.' : 'Connect MCP endpoints to see tools here.'">
             <template #icon>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-                    style="color: var(--text-tertiary);">
-                    <path
-                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                        stroke-linecap="round" stroke-linejoin="round" />
-                    <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <Settings :size="24" :stroke-width="1.5" style="color: var(--text-tertiary);" />
             </template>
         </EmptyState>
 
@@ -284,12 +276,9 @@
                         <AppToggle v-if="endpointId || tool.endpointId" :model-value="!tool.isDisabled"
                             :disabled="togglingTool === tool.name" @update:model-value="toggleToolEnabled(tool)"
                             @click.stop />
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2.5" class="transition-transform duration-200" :style="expandedTool === tool.name
-                                ? 'transform: rotate(180deg); color: var(--color-primary, #6366f1);'
-                                : 'color: var(--text-tertiary);'">
-                            <path d="M6 9l6 6 6-6" />
-                        </svg>
+                        <ChevronDown :size="14" :stroke-width="2.5" class="transition-transform duration-200" :style="expandedTool === tool.name
+                            ? 'transform: rotate(180deg); color: var(--color-primary, #6366f1);'
+                            : 'color: var(--text-tertiary);'" />
                     </div>
                 </button>
 

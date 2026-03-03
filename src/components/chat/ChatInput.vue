@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { ref, computed } from 'vue';
+  import { Paperclip, File, X, Wrench, Square, ArrowRight } from 'lucide-vue-next';
   import ContextRing from '@/components/chat/ContextRing.vue';
   import ContextDetailPopover from '@/components/chat/ContextDetailPopover.vue';
   import ModelSelector from '@/components/chat/ModelSelector.vue';
@@ -114,11 +115,7 @@
     <!-- ── Header: attach (left) + context ring (right) ── -->
     <div class="input-header">
       <button type="button" class="icon-btn" @click="openFilePicker" title="Attach file">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
-          <path
-            d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"
-            stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
+        <Paperclip :size="16" :stroke-width="1.75" />
       </button>
 
       <button v-if="contextSize" type="button" class="context-ring-btn" title="Context window details"
@@ -136,18 +133,12 @@
       <div v-for="att in attachments" :key="att.id" class="preview-item">
         <img v-if="att.type.startsWith('image/')" :src="att.base64" :alt="att.name" class="preview-image" />
         <div v-else class="preview-file">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke-linecap="round"
-              stroke-linejoin="round" />
-            <polyline points="14 2 14 8 20 8" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <File :size="14" :stroke-width="2" />
           <span class="preview-filename">{{ att.name }}</span>
           <span class="preview-size">{{ formatSize(att.size) }}</span>
         </div>
         <button type="button" class="preview-remove" @click="removeAttachment(att.id)">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-            <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" />
-          </svg>
+          <X :size="10" :stroke-width="3" />
         </button>
       </div>
     </div>
@@ -167,11 +158,7 @@
           :class="{ 'tool-badge--partial': activeToolCount !== undefined && activeToolCount < totalToolCount }"
           :title="`${activeToolCount ?? totalToolCount} / ${totalToolCount} tools active — click to manage`"
           @click="emit('openToolManager')">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path
-              d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"
-              stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <Wrench :size="12" :stroke-width="2" />
           <span class="tool-count">{{ activeToolCount ?? totalToolCount }}</span>
         </button>
       </div>
@@ -179,12 +166,8 @@
         <button type="button" :class="['icon-btn', 'send-icon', { 'send-active': canSend, 'send-stop': isGenerating }]"
           @click="isGenerating ? emit('stop') : sendMessage()" :disabled="!isGenerating && !canSend"
           :title="isGenerating ? 'Stop generation (Enter)' : 'Send message (Enter)'">
-          <svg v-if="isGenerating" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="6" y="6" width="12" height="12" rx="2" />
-          </svg>
-          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M5 12h14M12 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <Square v-if="isGenerating" :size="16" fill="currentColor" :stroke-width="0" />
+          <ArrowRight v-else :size="16" :stroke-width="2" />
         </button>
       </div>
     </div>

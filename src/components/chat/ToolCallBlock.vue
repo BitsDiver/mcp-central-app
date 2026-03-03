@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { ref, computed } from 'vue';
+  import { ChevronRight, Check, Copy } from 'lucide-vue-next';
   import type { ChatToolCall } from '@/types';
 
   const props = defineProps<{ toolCall: ChatToolCall; }>();
@@ -65,10 +66,8 @@
       <span class="tool-node-name">{{ toolCall.name }}</span>
       <span :class="['tool-node-status', statusInfo.cls]">{{ statusInfo.label }}</span>
       <!-- Chevron -->
-      <svg class="tool-node-chevron" :class="{ 'tool-node-chevron--open': expanded }" width="11" height="11"
-        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
+      <ChevronRight class="tool-node-chevron" :class="{ 'tool-node-chevron--open': expanded }" :size="11"
+        :stroke-width="2.5" />
     </button>
 
     <!-- Expanded body -->
@@ -78,15 +77,8 @@
         <div class="tool-section-hdr">
           <span class="tool-section-lbl">Arguments</span>
           <button type="button" class="copy-btn" title="Copy arguments" @click.stop="copyToClipboard(argsText, 'args')">
-            <svg v-if="copiedArgs" width="12" height="12" viewBox="0 0 24 24" fill="none"
-              stroke="var(--color-success-500)" stroke-width="2.5">
-              <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke-linecap="round"
-                stroke-linejoin="round" />
-            </svg>
+            <Check v-if="copiedArgs" :size="12" stroke="var(--color-success-500)" :stroke-width="2.5" />
+            <Copy v-else :size="12" :stroke-width="2" />
           </button>
         </div>
         <pre class="tool-code">{{ argsText }}</pre>
@@ -98,15 +90,8 @@
           <span class="tool-section-lbl">{{ toolCall.error ? 'Error' : 'Result' }}</span>
           <button type="button" class="copy-btn" title="Copy result"
             @click.stop="copyToClipboard(resultText!, 'result')">
-            <svg v-if="copiedResult" width="12" height="12" viewBox="0 0 24 24" fill="none"
-              stroke="var(--color-success-500)" stroke-width="2.5">
-              <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke-linecap="round"
-                stroke-linejoin="round" />
-            </svg>
+            <Check v-if="copiedResult" :size="12" stroke="var(--color-success-500)" :stroke-width="2.5" />
+            <Copy v-else :size="12" :stroke-width="2" />
           </button>
         </div>
         <p v-if="toolCall.error" class="tool-error-text">{{ resultText }}</p>

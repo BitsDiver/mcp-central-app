@@ -1,5 +1,6 @@
 <script setup lang="ts">
-    import { ref, nextTick } from 'vue';
+    import { ref, nextTick, markRaw, type Component } from 'vue';
+    import { MessageCircleMore, ClipboardList, Zap, Wrench } from 'lucide-vue-next';
     import ChatMessage from '@/components/chat/ChatMessage.vue';
     import { useChatSettingsStore } from '@/stores/chatSettings';
     import type { ChatMessage as ChatMessageType } from '@/types';
@@ -18,21 +19,21 @@
     const settingsStore = useChatSettingsStore();
     const container = ref<HTMLElement | null>(null);
 
-    const WELCOME: Record<string, { title: string; sub: string; icon: string; }> = {
+    const WELCOME: Record<string, { title: string; sub: string; icon: Component; }> = {
         ask: {
             title: 'Ask anything',
             sub: 'Single-shot answers from your AI model',
-            icon: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
+            icon: markRaw(MessageCircleMore),
         },
         plan: {
             title: 'Describe a goal',
             sub: 'The AI will decompose it into tasks for your review',
-            icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
+            icon: markRaw(ClipboardList),
         },
         agent: {
             title: 'What would you like to automate?',
             sub: 'Fully autonomous tool loop with your connected MCP servers',
-            icon: 'M13 10V3L4 14h7v7l9-11h-7z',
+            icon: markRaw(Zap),
         },
     };
 
@@ -52,19 +53,13 @@
     <div ref="container" class="messages-area">
         <div v-if="messages.length === 0" class="empty-chat">
             <div class="empty-icon">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path :d="WELCOME[currentMode()].icon" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <component :is="WELCOME[currentMode()].icon" :size="22" :stroke-width="1.5" />
             </div>
             <p class="empty-title">{{ WELCOME[currentMode()].title }}</p>
             <p class="empty-sub">{{ WELCOME[currentMode()].sub }}</p>
             <div class="empty-chips">
                 <span v-if="toolCount > 0" class="chip chip--tools">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path
-                            d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"
-                            stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
+                    <Wrench :size="10" :stroke-width="2" />
                     {{ toolCount }} tool{{ toolCount !== 1 ? 's' : '' }}
                 </span>
                 <span v-else class="chip chip--muted">No tools loaded</span>

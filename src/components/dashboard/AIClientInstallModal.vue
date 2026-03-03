@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { ref, computed, watch, markRaw } from 'vue';
+  import { ChevronLeft, Check, TriangleAlert, Info, Copy, KeyRound, Loader2, Download } from 'lucide-vue-next';
   import AppModal from '@/components/ui/AppModal.vue';
   import AppButton from '@/components/ui/AppButton.vue';
   import { AI_CLIENTS } from '@/data/aiClients';
@@ -15,8 +16,8 @@
   import IconOpenWebUI from '@/components/icons/IconOpenWebUI.vue';
   import IconAntigravity from '@/components/icons/IconAntigravity.vue';
 
-  const props = defineProps<{ open: boolean }>();
-  const emit = defineEmits<{ close: [] }>();
+  const props = defineProps<{ open: boolean; }>();
+  defineEmits<{ close: []; }>();
 
   // ── Icon registry ──────────────────────────────────────────────────────────
   const ICONS: Record<string, object> = {
@@ -91,7 +92,7 @@
   });
 
   const modalTitle = computed(() =>
-    step.value === 'select' ? 'Install in AI client' : undefined,
+    step.value === 'select' ? 'Connect AI client' : undefined,
   );
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -159,26 +160,18 @@
       </p>
 
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <button
-          v-for="client in AI_CLIENTS"
-          :key="client.id"
-          type="button"
+        <button v-for="client in AI_CLIENTS" :key="client.id" type="button"
           class="flex flex-col items-center gap-2.5 rounded-xl p-4 text-center transition-all duration-150 border-2"
           :style="selectedClientId === client.id
             ? 'border-color: var(--color-primary, #3b82f6); background: color-mix(in srgb, var(--color-primary, #3b82f6) 8%, var(--bg-surface));'
             : 'border-color: var(--border-default); background: var(--bg-surface);'"
           :class="selectedClientId === client.id ? '' : 'hover:border-[var(--border-strong)]'"
-          @click="selectedClientId = client.id; continueToInstructions()"
-        >
+          @click="selectedClientId = client.id; continueToInstructions()">
           <!-- Check badge -->
-          <span
-            v-if="selectedClientId === client.id"
+          <span v-if="selectedClientId === client.id"
             class="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center"
-            style="background: var(--color-primary, #3b82f6);"
-          >
-            <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
-              <path d="M2 6l3 3 5-5" />
-            </svg>
+            style="background: var(--color-primary, #3b82f6);">
+            <Check :size="9" :stroke-width="2.5" stroke="white" />
           </span>
 
           <!-- Icon wrapper -->
@@ -213,11 +206,8 @@
           <p class="text-xs" style="color: var(--text-tertiary);">{{ selectedClient.tagline }}</p>
         </div>
         <button type="button" class="text-xs flex items-center gap-1 transition-colors"
-          style="color: var(--text-tertiary);"
-          @click="goBack">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
+          style="color: var(--text-tertiary);" @click="goBack">
+          <ChevronLeft :size="13" :stroke-width="2.5" />
           Change client
         </button>
       </div>
@@ -227,16 +217,11 @@
 
         <!-- OS tabs -->
         <div v-if="selectedClient.showOsPicker" class="flex items-center gap-1">
-          <button
-            v-for="(label, key) in OS_LABELS"
-            :key="key"
-            type="button"
-            class="text-xs px-3 py-1.5 rounded-md font-medium transition-colors"
-            :style="os === key
+          <button v-for="(label, key) in OS_LABELS" :key="key" type="button"
+            class="text-xs px-3 py-1.5 rounded-md font-medium transition-colors" :style="os === key
               ? 'background: var(--bg-muted); color: var(--text-primary); border: 1px solid var(--border-strong);'
               : 'background: transparent; color: var(--text-tertiary); border: 1px solid transparent;'"
-            @click="os = key"
-          >
+            @click="os = key">
             {{ label }}
           </button>
         </div>
@@ -246,26 +231,21 @@
           <span style="color: var(--text-secondary);">Config file: </span>
           <code class="font-mono px-1.5 py-0.5 rounded text-xs"
             style="background: var(--bg-muted); color: var(--text-primary);">{{ currentConfigPath }}</code>
-          <span v-if="selectedClient.isSnippet" class="ml-2 text-xs" style="color: var(--text-tertiary);">(snippet — merge into existing file)</span>
+          <span v-if="selectedClient.isSnippet" class="ml-2 text-xs" style="color: var(--text-tertiary);">(snippet —
+            merge into existing file)</span>
         </p>
 
         <!-- Status banner: success -->
         <div v-if="isKeyReal" class="flex items-center gap-2 rounded-lg p-3 border text-sm"
           style="background: color-mix(in srgb, #22c55e 8%, var(--bg-surface)); border-color: color-mix(in srgb, #22c55e 30%, transparent); color: #15803d;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0">
-            <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <Check :size="15" :stroke-width="2.5" class="shrink-0" />
           <span>Key generated — <strong>save it now, it will not be shown again.</strong></span>
         </div>
 
         <!-- Status banner: regenerate warning -->
         <div v-else-if="hasExistingKeys" class="flex gap-3 rounded-lg p-3 border text-sm"
           style="background: color-mix(in srgb, #f59e0b 8%, var(--bg-surface)); border-color: color-mix(in srgb, #f59e0b 30%, transparent);">
-          <svg class="shrink-0 mt-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
-            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-            <line x1="12" y1="9" x2="12" y2="13" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
+          <TriangleAlert class="shrink-0 mt-0.5" :size="16" stroke="#f59e0b" />
           <div style="color: #b45309;">
             <p class="font-medium mb-0.5" style="color: #92400e;">
               This will regenerate the key <em>{{ tenantStore.apiKeys[0].label }}</em>
@@ -290,8 +270,10 @@
           <div class="flex items-center justify-between px-3 py-2 border-b"
             style="background: var(--bg-muted); border-color: var(--border-default);">
             <div class="flex items-center gap-2">
-              <span class="text-xs font-mono" style="color: var(--text-secondary);">{{ selectedClient.exportFilename }}</span>
-              <span v-if="isKeyReal" class="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-medium"
+              <span class="text-xs font-mono" style="color: var(--text-secondary);">{{ selectedClient.exportFilename
+              }}</span>
+              <span v-if="isKeyReal"
+                class="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-medium"
                 style="background: color-mix(in srgb, #22c55e 12%, transparent); color: #15803d;">
                 <span class="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
                 Live key
@@ -303,13 +285,8 @@
             </div>
             <button @click="copyJson" class="flex items-center gap-1.5 text-xs transition-colors"
               :style="copiedJson ? 'color: #22c55e' : 'color: var(--text-tertiary)'">
-              <svg v-if="!copiedJson" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-              </svg>
-              <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
+              <Copy v-if="!copiedJson" :size="13" />
+              <Check v-else :size="13" :stroke-width="2.5" />
               {{ copiedJson ? 'Copied!' : 'Copy' }}
             </button>
           </div>
@@ -320,13 +297,10 @@
         <!-- Config note (e.g. Windsurf serverUrl warning) -->
         <div v-if="selectedClient.configNote" class="flex gap-2 rounded-lg px-3 py-2.5 border text-xs"
           style="background: color-mix(in srgb, #3b82f6 6%, var(--bg-surface)); border-color: color-mix(in srgb, #3b82f6 25%, transparent); color: var(--text-secondary);">
-          <svg class="shrink-0 mt-0.5" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
+          <Info class="shrink-0 mt-0.5" :size="13" stroke="#3b82f6" />
           <!-- eslint-disable-next-line vue/no-v-html -->
-          <span v-html="selectedClient.configNote.replace(/`([^`]+)`/g, '<code class=&quot;font-mono px-0.5&quot;>$1</code>')" />
+          <span
+            v-html="selectedClient.configNote.replace(/`([^`]+)`/g, '<code class=&quot;font-mono px-0.5&quot;>$1</code>')" />
         </div>
 
         <p class="text-xs" style="color: var(--text-tertiary);">
@@ -341,22 +315,18 @@
         </p>
 
         <!-- Key generation callout -->
-        <div v-if="!isKeyReal" class="flex items-center gap-3 rounded-lg px-3 py-2.5 border text-xs"
-          :style="hasExistingKeys
-            ? 'background: color-mix(in srgb, #f59e0b 6%, var(--bg-surface)); border-color: color-mix(in srgb, #f59e0b 25%, transparent);'
-            : 'background: var(--bg-muted); border-color: var(--border-default);'">
-          <svg class="shrink-0" width="13" height="13" viewBox="0 0 24 24" fill="none"
-            :stroke="hasExistingKeys ? '#f59e0b' : 'var(--text-tertiary)'" stroke-width="2">
-            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"
-              stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+        <div v-if="!isKeyReal" class="flex items-center gap-3 rounded-lg px-3 py-2.5 border text-xs" :style="hasExistingKeys
+          ? 'background: color-mix(in srgb, #f59e0b 6%, var(--bg-surface)); border-color: color-mix(in srgb, #f59e0b 25%, transparent);'
+          : 'background: var(--bg-muted); border-color: var(--border-default);'">
+          <KeyRound class="shrink-0" :size="13" :stroke="hasExistingKeys ? '#f59e0b' : 'var(--text-tertiary)'" />
           <span style="color: var(--text-secondary);">
             <span v-if="hasExistingKeys" style="color: #92400e;">
               <strong>Generate key first</strong> — this will regenerate your existing key
               <em>{{ tenantStore.apiKeys[0].label }}</em>.
             </span>
             <span v-else>
-              Click <strong style="color: var(--text-primary);">Generate key</strong> below to get your API key before following the steps.
+              Click <strong style="color: var(--text-primary);">Generate key</strong> below to get your API key before
+              following the steps.
             </span>
           </span>
         </div>
@@ -376,19 +346,15 @@
             </div>
 
             <!-- Optional code block -->
-            <div v-if="s.code" class="ml-8 rounded-lg overflow-hidden border" style="border-color: var(--border-default);">
+            <div v-if="s.code" class="ml-8 rounded-lg overflow-hidden border"
+              style="border-color: var(--border-default);">
               <div class="flex items-center justify-between px-3 py-1.5 border-b"
                 style="background: var(--bg-muted); border-color: var(--border-default);">
                 <span class="text-xs font-mono" style="color: var(--text-secondary);">{{ s.codeLabel ?? 'JSON' }}</span>
                 <button @click="copyStep(s.code!, i)" class="flex items-center gap-1.5 text-xs transition-colors"
                   :style="copiedStepIndex === i ? 'color: #22c55e' : 'color: var(--text-tertiary)'">
-                  <svg v-if="copiedStepIndex !== i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                  </svg>
-                  <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
-                  </svg>
+                  <Copy v-if="copiedStepIndex !== i" :size="12" />
+                  <Check v-else :size="12" :stroke-width="2.5" />
                   {{ copiedStepIndex === i ? 'Copied!' : 'Copy' }}
                 </button>
               </div>
@@ -409,24 +375,15 @@
       <!-- Step: instructions (json-file) — Generate key + Download -->
       <template v-if="step === 'instructions' && selectedClient?.configType === 'json-file'">
         <AppButton v-if="!isKeyReal" :disabled="isGenerating" @click="generateKey">
-          <svg v-if="isGenerating" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2" class="animate-spin">
-            <path d="M21 12a9 9 0 11-6.22-8.56" stroke-linecap="round" />
-          </svg>
-          <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"
-              stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <Loader2 v-if="isGenerating" :size="14" class="animate-spin" />
+          <KeyRound v-else :size="14" />
           <span v-if="isGenerating">Generating…</span>
           <span v-else-if="hasExistingKeys">Regenerate key</span>
           <span v-else>Generate key</span>
         </AppButton>
 
         <AppButton v-else @click="download">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"
-              stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <Download :size="14" />
           Download {{ selectedClient.exportFilename }}
         </AppButton>
       </template>
@@ -434,14 +391,8 @@
       <!-- Step: instructions (gui) — Generate key if not done yet -->
       <template v-if="step === 'instructions' && selectedClient?.configType === 'gui'">
         <AppButton v-if="!isKeyReal" :disabled="isGenerating" @click="generateKey">
-          <svg v-if="isGenerating" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2" class="animate-spin">
-            <path d="M21 12a9 9 0 11-6.22-8.56" stroke-linecap="round" />
-          </svg>
-          <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"
-              stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <Loader2 v-if="isGenerating" :size="14" class="animate-spin" />
+          <KeyRound v-else :size="14" />
           <span v-if="isGenerating">Generating…</span>
           <span v-else-if="hasExistingKeys">Regenerate key</span>
           <span v-else>Generate key</span>

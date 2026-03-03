@@ -1,5 +1,5 @@
 <script setup lang="ts">
-    import { ref, computed, watch } from 'vue';
+    import { ref, computed, watch, markRaw } from 'vue';
     import ServerCard from '@/components/registry/ServerCard.vue';
     import AppListbox from '@/components/ui/AppListbox.vue';
     import SkeletonBlock from '@/components/ui/SkeletonBlock.vue';
@@ -7,6 +7,7 @@
     import type { ListboxOption } from '@/types';
     import { useRegistry } from '@/composables/useRegistry';
     import { useEndpointStore } from '@/stores/endpoints';
+    import { LayoutGrid, Globe, Terminal, Wifi, Search, X } from 'lucide-vue-next';
 
     const props = withDefaults(defineProps<{
         /**
@@ -35,25 +36,25 @@
         {
             value: 'all',
             label: 'All transports',
-            icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+            icon: markRaw(LayoutGrid),
         },
         {
             value: 'streamable-http',
             label: 'HTTP',
             description: 'Remote server — no local agent required',
-            icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+            icon: markRaw(Globe),
         },
         {
             value: 'stdio',
             label: 'stdio',
             description: 'Local process — requires an agent',
-            icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`,
+            icon: markRaw(Terminal),
         },
         {
             value: 'sse',
             label: 'SSE',
             description: 'Server-Sent Events — remote stream',
-            icon: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor" stroke="none"/></svg>`,
+            icon: markRaw(Wifi),
         },
     ];
 
@@ -130,12 +131,9 @@
         <div class="flex flex-wrap items-center gap-2">
             <AppListbox v-model="activeTransport" :options="TRANSPORT_OPTIONS" size="sm" placement="bottom" />
             <div class="relative flex-1" :style="compact ? 'min-width: 0;' : 'min-width: 220px;'">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                <Search :size="14" :stroke-width="2"
                     class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                    style="color: var(--text-tertiary);">
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="M21 21l-4.35-4.35" />
-                </svg>
+                    style="color: var(--text-tertiary);" />
                 <input v-model="search" type="text" placeholder="Search servers…"
                     class="w-full pl-8 py-2 text-sm rounded-lg border outline-none transition-colors"
                     :class="search ? 'pr-8' : 'pr-3'"
@@ -143,10 +141,7 @@
                 <button v-if="search" @click="search = ''; searchServers('')"
                     class="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 transition-colors hover:bg-[var(--bg-hover)]"
                     style="color: var(--text-tertiary);" title="Clear search">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2.5">
-                        <path d="M18 6 6 18M6 6l12 12" stroke-linecap="round" />
-                    </svg>
+                    <X :size="13" :stroke-width="2.5" />
                 </button>
             </div>
         </div>

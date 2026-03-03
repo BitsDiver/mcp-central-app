@@ -12,6 +12,7 @@
   import { useEndpointStore } from '@/stores/endpoints';
   import { useAgentStore } from '@/stores/agents';
   import { useError } from '@/composables/useError';
+  import { Notebook } from 'lucide-vue-next';
 
   const endpointStore = useEndpointStore();
   const agentStore = useAgentStore();
@@ -99,7 +100,10 @@
   <AppLayout>
     <div class="px-4 md:px-6 lg:px-8 py-6 max-w-7xl mx-auto">
       <div class="mb-6">
-        <h1 class="text-xl font-semibold" style="color: var(--text-primary);">MCP Registry</h1>
+        <h1 class="text-xl font-semibold flex items-center gap-2" style="color: var(--text-primary);">
+          <Notebook :size="20" :stroke-width="2" />
+          MCP Registry
+        </h1>
         <p class="text-sm mt-1" style="color: var(--text-secondary);">
           Discover and add MCP servers from the official registry and community
         </p>
@@ -121,7 +125,7 @@
               :label="`${envVar.key}${envVar.required ? '' : ' (optional)'}`" :placeholder="envVar.placeholder ?? ''"
               :id="`env-${envVar.key}`" />
             <p v-if="envVar.description" class="text-xs mt-1" style="color: var(--text-tertiary);">{{ envVar.description
-              }}
+            }}
             </p>
           </div>
         </div>

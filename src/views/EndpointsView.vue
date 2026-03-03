@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, computed, onMounted } from 'vue';
+  import { ref, computed, onMounted, markRaw } from 'vue';
   import AppLayout from '@/components/layout/AppLayout.vue';
   import AppButton from '@/components/ui/AppButton.vue';
   import AppModal from '@/components/ui/AppModal.vue';
@@ -22,6 +22,8 @@
   import { useError } from '@/composables/useError';
   import type { Endpoint, EndpointStatus, AgentWithStatus } from '@/types';
   import type { RegistryServer } from '@/data/mcpRegistry';
+  import { Globe, Terminal, Users, Activity, LayoutGrid, Router, Plus, ArrowRight, ChevronDown, RefreshCw, SquarePen, Trash2, Link, DatabaseZap } from 'lucide-vue-next';
+
 
   const endpointStore = useEndpointStore();
   const agentStore = useAgentStore();
@@ -85,19 +87,19 @@
       value: 'streamable-http',
       label: 'Streamable HTTP',
       description: 'Connect to a remote MCP server via HTTP',
-      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>',
+      icon: markRaw(Globe),
     },
     {
       value: 'stdio',
       label: 'stdio (via local agent)',
       description: 'Run a local process through a tunnel agent',
-      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>',
+      icon: markRaw(Terminal),
     },
     {
       value: 'a2a',
       label: 'A2A Agent (HTTP+JSON)',
       description: 'Connect to an external A2A v1.0 agent',
-      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>',
+      icon: markRaw(Users),
     },
   ];
 
@@ -105,7 +107,7 @@
     {
       value: '',
       label: 'None (direct server connection)',
-      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+      icon: markRaw(Activity),
     },
     ...agentStore.agents.map((a) => ({
       value: a.id,
@@ -338,30 +340,23 @@
     <div class="px-4 md:px-6 lg:px-8 py-6 max-w-7xl mx-auto">
       <div class="flex items-center justify-between mb-6">
         <div>
-          <h1 class="text-xl font-semibold" style="color: var(--text-primary);">MCP Servers</h1>
+          <h1 class="text-xl font-semibold flex items-center gap-2" style="color: var(--text-primary);">
+            <DatabaseZap :size="20" :stroke-width="2" />
+            MCP Servers
+          </h1>
           <p class="text-sm mt-1" style="color: var(--text-secondary);">Manage your upstream MCP servers</p>
         </div>
         <div class="flex items-center gap-2">
           <AppButton variant="secondary" @click="showRegistryModal = true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7" rx="1" />
-              <rect x="14" y="3" width="7" height="7" rx="1" />
-              <rect x="3" y="14" width="7" height="7" rx="1" />
-              <rect x="14" y="14" width="7" height="7" rx="1" />
-            </svg>
+            <LayoutGrid :size="16" :stroke-width="2" />
             Browse Registry
           </AppButton>
           <AppButton variant="secondary" @click="showAgentModal = true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="3" width="20" height="14" rx="2" />
-              <path d="M8 21h8M12 17v4" />
-            </svg>
+            <Router :size="16" :stroke-width="2" />
             Add Local Agent
           </AppButton>
           <AppButton @click="openAdd">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
+            <Plus :size="16" :stroke-width="2.5" />
             Add MCP Server
           </AppButton>
         </div>
@@ -370,10 +365,119 @@
       <div class="mb-4">
         <input v-model="search" type="search" placeholder="Search MCP servers…"
           class="w-full max-w-xs px-3 py-2 text-sm rounded-lg border outline-none transition-colors"
-          style="background: var(--bg-input); color: var(--text-primary); border-color: var(--border-default);"
+          style="color: var(--text-primary); border-color: var(--border-default);"
           :onfocus="(e: FocusEvent) => (e.target as HTMLElement).style.borderColor = 'var(--border-focus)'"
           :onblur="(e: FocusEvent) => (e.target as HTMLElement).style.borderColor = 'var(--border-default)'" />
       </div>
+
+      <!-- Direct endpoints (MCP Central) -->
+      <div class="mb-6">
+        <h2 class="text-sm font-semibold mb-3" style="color: var(--text-primary);">
+          MCP Central
+          <span class="ml-2 text-xs font-normal" style="color: var(--text-tertiary);">{{ filtered.length }}
+            server{{ filtered.length !== 1 ? 's' : '' }}</span>
+        </h2>
+
+        <div v-if="endpointStore.isLoading" class="card overflow-hidden">
+          <div v-for="i in 4" :key="i" class="flex items-center gap-4 px-5 py-4 border-b"
+            style="border-color: var(--border-default);">
+            <SkeletonBlock height="1rem" width="25%" />
+            <SkeletonBlock height="1rem" width="15%" />
+            <SkeletonBlock height="1.5rem" width="80px" />
+          </div>
+        </div>
+
+        <EmptyState v-else-if="filtered.length === 0" title="No endpoints found"
+          :description="search ? 'Try a different search term.' : 'Add your first MCP server to get started.'">
+          <template #icon>
+            <ArrowRight :size="24" :stroke-width="1.5" style="color: var(--text-tertiary);" />
+          </template>
+          <div v-if="!search" class="flex items-center gap-2">
+            <AppButton size="sm" variant="secondary" @click="showRegistryModal = true">Browse Registry</AppButton>
+            <AppButton size="sm" @click="openAdd">Add MCP Server</AppButton>
+          </div>
+        </EmptyState>
+
+        <div v-else class="card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b" style="border-color: var(--border-default);">
+                  <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider"
+                    style="color: var(--text-tertiary);">Name</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden sm:table-cell"
+                    style="color: var(--text-tertiary);">Namespace</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden md:table-cell"
+                    style="color: var(--text-tertiary);">Transport</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider"
+                    style="color: var(--text-tertiary);">Status</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden lg:table-cell"
+                    style="color: var(--text-tertiary);">Tools</th>
+                  <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider"
+                    style="color: var(--text-tertiary);">Enabled</th>
+                  <th class="px-5 py-3" />
+                </tr>
+              </thead>
+              <tbody class="divide-y" style="border-color: var(--border-default);">
+                <tr v-for="ep in filtered" :key="ep.id" class="transition-colors hover:bg-[var(--bg-hover)]">
+                  <td class="px-5 py-3">
+                    <div class="flex items-center gap-2">
+                      <!-- Registry icon: colored chip with letters or image -->
+                      <span v-if="ep.iconLetters || ep.iconUrl"
+                        class="w-6 h-6 rounded flex items-center justify-center shrink-0 text-[9px] font-bold overflow-hidden"
+                        :style="`background: ${ep.iconColor ?? '#6366f1'}`">
+                        <img v-if="ep.iconUrl" :src="ep.iconUrl" class="w-full h-full object-cover"
+                          :alt="ep.iconLetters || 'MCP Server Icon'" />
+                        <span v-else style="color: white;">{{ ep.iconLetters }}</span>
+                      </span>
+                      <!-- Fallback: muted chip with link icon -->
+                      <span v-else class="w-6 h-6 rounded flex items-center justify-center shrink-0"
+                        style="background: var(--bg-muted); border: 1px solid var(--border-default);">
+                        <Link :size="12" :stroke-width="1.75" style="color: var(--text-tertiary);" />
+                      </span>
+                      <router-link :to="`/endpoints/${ep.id}`" class="font-medium text-blue-500 hover:underline">{{
+                        ep.name
+                      }}</router-link>
+                    </div>
+                  </td>
+                  <td class="px-5 py-3 hidden sm:table-cell">
+                    <code class="text-xs px-1.5 py-0.5 rounded font-mono"
+                      style="background: var(--bg-muted); color: var(--text-secondary);">{{ ep.namespace }}</code>
+                  </td>
+                  <td class="px-5 py-3 hidden md:table-cell" style="color: var(--text-secondary);">{{ ep.transport }}
+                  </td>
+                  <td class="px-5 py-3">
+                    <StatusBadge :status="getUpstreamStatus(ep.id)" />
+                  </td>
+                  <td class="px-5 py-3 hidden lg:table-cell" style="color: var(--text-primary);">{{
+                    toolStore.getActiveCountForEndpoint(ep.id) }}/{{ toolStore.getTotalCountForEndpoint(ep.id) }}</td>
+                  <td class="px-5 py-3">
+                    <AppToggle :model-value="ep.isEnabled" @update:model-value="toggle(ep)" />
+                  </td>
+                  <td class="px-5 py-3">
+                    <div class="flex items-center gap-1 justify-end">
+                      <AppButton variant="ghost" size="sm" :loading="refreshing === ep.id"
+                        :title="ep.connectionStatus === 'connected' ? 'Re-list tools' : 'Reconnect'"
+                        @click="refresh(ep)">
+                        <RefreshCw v-if="refreshing !== ep.id" :size="15" :stroke-width="2" />
+                      </AppButton>
+                      <AppButton variant="ghost" size="sm" @click="openEdit(ep)">
+                        <SquarePen :size="15" :stroke-width="2" />
+                      </AppButton>
+                      <AppButton variant="ghost" size="sm" @click="deleteTarget = ep">
+                        <Trash2 :size="15" :stroke-width="2" class="text-red-500" />
+                      </AppButton>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Separator between direct endpoints and agents -->
+      <hr v-if="agentStore.agents.length > 0" class="my-6" style="border-color: var(--border-default);" />
 
       <!-- Local agents section -->
       <div v-if="agentStore.agents.length > 0" class="mb-6">
@@ -387,11 +491,9 @@
             <!-- Agent header row -->
             <div class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
               @click="toggleAgentCollapse(agent.id)">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              <ChevronDown :size="14" :stroke-width="2"
                 class="transition-transform shrink-0" style="color: var(--text-tertiary);"
-                :style="collapsedAgents.has(agent.id) ? 'transform:rotate(-90deg)' : ''">
-                <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
+                :style="collapsedAgents.has(agent.id) ? 'transform:rotate(-90deg)' : ''" />
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
                   <span class="font-medium text-sm" style="color: var(--text-primary);">{{ agent.name }}</span>
@@ -411,17 +513,10 @@
                 <span class="text-xs" style="color: var(--text-tertiary);">{{ agentEndpoints(agent.id).length }}
                   MCP server{{ agentEndpoints(agent.id).length > 1 ? 's' : '' }}</span>
                 <AppButton variant="ghost" size="sm" title="Edit agent" @click="editingAgent = agent">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
+                  <SquarePen :size="14" :stroke-width="2" />
                 </AppButton>
                 <AppButton variant="ghost" size="sm" title="Remove agent" @click="agentDeleteTarget = agent">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    class="text-red-500">
-                    <path
-                      d="M3 6h18M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                  </svg>
+                  <Trash2 :size="14" :stroke-width="2" class="text-red-500" />
                 </AppButton>
               </div>
             </div>
@@ -435,12 +530,17 @@
                 class="flex items-center gap-3 px-4 py-3 border-b last:border-b-0 hover:bg-[var(--bg-hover)] transition-colors"
                 style="border-color: var(--border-default);">
                 <div class="flex-1 min-w-0 flex items-center gap-2">
+                  <!-- Registry icon: colored chip -->
                   <span v-if="ep.iconLetters || ep.iconUrl"
-                    class="w-5 h-5 rounded flex items-center justify-center shrink-0 text-[8px] font-bold overflow-hidden"
-                    :style="`background: ${ep.iconColor ?? 'var(--bg-muted)'}`">
+                    class="w-5 h-5 rounded flex items-center justify-center shrink-0 text-[8px] font-bold overflow-hidden">
                     <img v-if="ep.iconUrl" :src="ep.iconUrl" class="w-full h-full object-cover"
                       :alt="ep.iconLetters ?? ''" />
                     <span v-else style="color: white;">{{ ep.iconLetters }}</span>
+                  </span>
+                  <!-- Fallback: muted chip with link icon -->
+                  <span v-else class="w-5 h-5 rounded flex items-center justify-center shrink-0"
+                    style="background: var(--bg-muted); border: 1px solid var(--border-default);">
+                    <Link :size="10" :stroke-width="1.75" style="color: var(--text-tertiary);" />
                   </span>
                   <router-link :to="`/endpoints/${ep.id}`" class="font-medium text-sm text-blue-500 hover:underline">{{
                     ep.name }}</router-link>
@@ -454,24 +554,13 @@
                 <AppToggle :model-value="ep.isEnabled" @update:model-value="toggle(ep)" />
                 <div class="flex items-center gap-1">
                   <AppButton variant="ghost" size="sm" :loading="refreshing === ep.id" @click="refresh(ep)">
-                    <svg v-if="refreshing !== ep.id" width="14" height="14" viewBox="0 0 24 24" fill="none"
-                      stroke="currentColor" stroke-width="2">
-                      <path d="M23 4v6h-6M1 20v-6h6" />
-                      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-                    </svg>
+                    <RefreshCw v-if="refreshing !== ep.id" :size="14" :stroke-width="2" />
                   </AppButton>
                   <AppButton variant="ghost" size="sm" @click="openEdit(ep)">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                    </svg>
+                    <SquarePen :size="14" :stroke-width="2" />
                   </AppButton>
                   <AppButton variant="ghost" size="sm" @click="deleteTarget = ep">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                      class="text-red-500">
-                      <path
-                        d="M3 6h18M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                    </svg>
+                    <Trash2 :size="14" :stroke-width="2" class="text-red-500" />
                   </AppButton>
                 </div>
               </div>
@@ -480,111 +569,6 @@
         </div>
       </div>
 
-      <!-- Direct endpoints (no agent) -->
-
-      <div v-if="endpointStore.isLoading" class="card overflow-hidden">
-        <div v-for="i in 4" :key="i" class="flex items-center gap-4 px-5 py-4 border-b"
-          style="border-color: var(--border-default);">
-          <SkeletonBlock height="1rem" width="25%" />
-          <SkeletonBlock height="1rem" width="15%" />
-          <SkeletonBlock height="1.5rem" width="80px" />
-        </div>
-      </div>
-
-      <EmptyState v-else-if="filtered.length === 0" title="No endpoints found"
-        :description="search ? 'Try a different search term.' : 'Add your first MCP server to get started.'">
-        <template #icon>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-            style="color: var(--text-tertiary);">
-            <path d="M5 12h14M12 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </template>
-        <div v-if="!search" class="flex items-center gap-2">
-          <AppButton size="sm" variant="secondary" @click="showRegistryModal = true">Browse Registry</AppButton>
-          <AppButton size="sm" @click="openAdd">Add MCP Server</AppButton>
-        </div>
-      </EmptyState>
-
-      <div v-else class="card overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b" style="border-color: var(--border-default);">
-                <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider"
-                  style="color: var(--text-tertiary);">Name</th>
-                <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden sm:table-cell"
-                  style="color: var(--text-tertiary);">Namespace</th>
-                <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden md:table-cell"
-                  style="color: var(--text-tertiary);">Transport</th>
-                <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider"
-                  style="color: var(--text-tertiary);">Status</th>
-                <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden lg:table-cell"
-                  style="color: var(--text-tertiary);">Tools</th>
-                <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider"
-                  style="color: var(--text-tertiary);">Enabled</th>
-                <th class="px-5 py-3" />
-              </tr>
-            </thead>
-            <tbody class="divide-y" style="border-color: var(--border-default);">
-              <tr v-for="ep in filtered" :key="ep.id" class="transition-colors hover:bg-[var(--bg-hover)]">
-                <td class="px-5 py-3">
-                  <div class="flex items-center gap-2">
-                    <span v-if="ep.iconLetters || ep.iconUrl"
-                      class="w-6 h-6 rounded flex items-center justify-center shrink-0 text-[9px] font-bold overflow-hidden"
-                      :style="`background: ${ep.iconColor ?? 'var(--bg-muted)'}`">
-                      <img v-if="ep.iconUrl" :src="ep.iconUrl" class="w-full h-full object-cover"
-                        :alt="ep.iconLetters || 'MCP Server Icon'" />
-                      <span v-else style="color: white;">{{ ep.iconLetters }}</span>
-                    </span>
-                    <router-link :to="`/endpoints/${ep.id}`" class="font-medium text-blue-500 hover:underline">{{
-                      ep.name
-                      }}</router-link>
-                  </div>
-                </td>
-                <td class="px-5 py-3 hidden sm:table-cell">
-                  <code class="text-xs px-1.5 py-0.5 rounded font-mono"
-                    style="background: var(--bg-muted); color: var(--text-secondary);">{{ ep.namespace }}</code>
-                </td>
-                <td class="px-5 py-3 hidden md:table-cell" style="color: var(--text-secondary);">{{ ep.transport }}</td>
-                <td class="px-5 py-3">
-                  <StatusBadge :status="getUpstreamStatus(ep.id)" />
-                </td>
-                <td class="px-5 py-3 hidden lg:table-cell" style="color: var(--text-primary);">{{
-                  toolStore.getActiveCountForEndpoint(ep.id) }}/{{ toolStore.getTotalCountForEndpoint(ep.id) }}</td>
-                <td class="px-5 py-3">
-                  <AppToggle :model-value="ep.isEnabled" @update:model-value="toggle(ep)" />
-                </td>
-                <td class="px-5 py-3">
-                  <div class="flex items-center gap-1 justify-end">
-                    <AppButton variant="ghost" size="sm" :loading="refreshing === ep.id"
-                      :title="ep.connectionStatus === 'connected' ? 'Re-list tools' : 'Reconnect'" @click="refresh(ep)">
-                      <svg v-if="refreshing !== ep.id" width="15" height="15" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2">
-                        <path d="M23 4v6h-6M1 20v-6h6" />
-                        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-                      </svg>
-                    </AppButton>
-                    <AppButton variant="ghost" size="sm" @click="openEdit(ep)">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2">
-                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
-                    </AppButton>
-                    <AppButton variant="ghost" size="sm" @click="deleteTarget = ep">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        class="text-red-500">
-                        <path
-                          d="M3 6h18M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                      </svg>
-                    </AppButton>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
 
     <AppModal :open="showModal" :title="editingEndpoint ? 'Edit MCP Server' : 'Add MCP Server'" size="lg"

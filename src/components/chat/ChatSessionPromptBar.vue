@@ -1,5 +1,6 @@
 <script setup lang="ts">
     import { computed } from 'vue';
+    import { FileText } from 'lucide-vue-next';
     import { useChatStore } from '@/stores/chat';
     import { useChatSettingsStore } from '@/stores/chatSettings';
     import type { ChatSession } from '@/types';
@@ -28,10 +29,7 @@
     <div v-if="visible" class="session-prompt-bar">
         <div class="prompt-bar-header">
             <label class="session-prompt-label">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" />
-                    <path d="M8 10h8M8 14h5" stroke-linecap="round" />
-                </svg>
+                <FileText :size="12" :stroke-width="2" />
                 Session system prompt
             </label>
             <span v-if="isModified" class="session-prompt-badge">Modified</span>

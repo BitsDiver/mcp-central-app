@@ -1,5 +1,6 @@
 <script setup lang="ts">
-    import { computed, onMounted } from 'vue';
+    import { computed, onMounted, markRaw } from 'vue';
+    import { Box } from 'lucide-vue-next';
     import { useChatSettingsStore, PROVIDER_DEFAULT_MODELS } from '@/stores/chatSettings';
     import { useAiKeysStore } from '@/stores/aiKeys';
     import AppListbox from '@/components/ui/AppListbox.vue';
@@ -40,7 +41,7 @@
         return result;
     });
 
-    const CUBE_ICON = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" /></svg>`;
+    const CUBE_ICON = markRaw(Box);
 
     /** Flat options list with groups for each provider */
     const modelOptions = computed<ListboxOption[]>(() => {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { ref, watch } from 'vue';
+  import { Sparkles, ChevronRight } from 'lucide-vue-next';
   import { renderMarkdown } from '@/composables/useMarkdown';
 
   const props = defineProps<{
@@ -34,20 +35,15 @@
   <div class="thinking-block">
     <button type="button" class="thinking-toggle" @click="toggle">
       <!-- Sparkle / reasoning icon -->
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-        class="thinking-icon" aria-hidden="true">
-        <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" stroke-linejoin="round" />
-      </svg>
+      <Sparkles :size="11" :stroke-width="2" class="thinking-icon" aria-hidden="true" />
       <span class="thinking-label">Reasoning</span>
       <!-- Animated dots while no content yet -->
       <span v-if="!content" class="thinking-dots" aria-hidden="true">
         <span /><span /><span />
       </span>
       <!-- Chevron -->
-      <svg class="thinking-chevron" :class="{ 'thinking-chevron--open': expanded }" width="11" height="11"
-        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
+      <ChevronRight class="thinking-chevron" :class="{ 'thinking-chevron--open': expanded }" :size="11"
+        :stroke-width="2.5" />
     </button>
 
     <div class="thinking-content" :class="{ 'thinking-content--visible': expanded }">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed } from 'vue';
+  import { File, Layers, CircleAlert, Sun, RefreshCw } from 'lucide-vue-next';
   import { renderMarkdown } from '@/composables/useMarkdown';
   import ThinkingBlock from '@/components/chat/ThinkingBlock.vue';
   import ToolCallBlock from '@/components/chat/ToolCallBlock.vue';
@@ -33,10 +34,7 @@
         <div v-for="att in message.attachments" :key="att.id" class="attachment-item">
           <img v-if="att.type.startsWith('image/')" :src="att.base64" :alt="att.name" class="attachment-image" />
           <template v-else>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke-linecap="round" />
-              <polyline points="14 2 14 8 20 8" stroke-linecap="round" />
-            </svg>
+            <File :size="11" :stroke-width="2" />
             <span class="attachment-name">{{ att.name }}</span>
           </template>
         </div>
@@ -47,11 +45,7 @@
   <!-- ── Plan generating (no plan yet) ─────────────────────────────── -->
   <div v-else-if="isPlan && !message.agentPlan" class="msg-row msg-row--assistant">
     <div class="assistant-avatar" :class="{ 'assistant-avatar--streaming': message.isStreaming }">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-        aria-hidden="true">
-        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round"
-          stroke-linejoin="round" />
-      </svg>
+      <Layers :size="13" :stroke-width="2" aria-hidden="true" />
     </div>
     <div class="assistant-body">
       <!-- Thinking block: visible during waking-up / thinking phases -->
@@ -59,10 +53,7 @@
         :is-streaming="message.isStreaming" />
 
       <div v-if="message.error" class="assistant-error">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 8v4M12 16h.01" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
+        <CircleAlert :size="14" :stroke-width="2" />
         <span>{{ message.error }}</span>
       </div>
       <!-- Streaming: pulse dots + dynamic phase label ("Waking up model…" / "Thinking…" / "Generating plan…") -->
@@ -78,11 +69,7 @@
   <!-- ── Plan card ───────────────────────────────────────────────────── -->
   <div v-else-if="isPlan && message.agentPlan" class="msg-row msg-row--assistant">
     <div class="assistant-avatar">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-        aria-hidden="true">
-        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke-linecap="round"
-          stroke-linejoin="round" />
-      </svg>
+      <Layers :size="13" :stroke-width="2" aria-hidden="true" />
     </div>
     <div class="assistant-body">
       <PlanBlock :plan="message.agentPlan" :is-streaming="message.isStreaming" />
@@ -92,13 +79,7 @@
   <!-- ── Assistant turn ─────────────────────────────────────────────── -->
   <div v-else-if="isAssistant" class="msg-row msg-row--assistant">
     <div class="assistant-avatar" :class="{ 'assistant-avatar--streaming': message.isStreaming }">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-        aria-hidden="true">
-        <circle cx="12" cy="12" r="3" />
-        <path
-          d="M19.07 4.93l-1.41 1.41M12 2v2M4.93 4.93l1.41 1.41M2 12h2m14 0h2M4.93 19.07l1.41-1.41M12 20v2m5.66-2.34l-1.41-1.41"
-          stroke-linecap="round" />
-      </svg>
+      <Sun :size="13" :stroke-width="2" aria-hidden="true" />
     </div>
 
     <div class="assistant-body">
@@ -113,10 +94,7 @@
 
       <!-- Error state -->
       <div v-if="message.error" class="assistant-error">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 8v4M12 16h.01" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
+        <CircleAlert :size="14" :stroke-width="2" />
         <span>{{ message.error }}</span>
       </div>
 
@@ -132,11 +110,7 @@
       <!-- Retry -->
       <button v-if="canRetry" type="button" class="retry-btn" title="Retry from here"
         @click="emit('retry', message.id)">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M1 4v6h6M23 20v-6h-6" stroke-linecap="round" stroke-linejoin="round" />
-          <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" stroke-linecap="round"
-            stroke-linejoin="round" />
-        </svg>
+        <RefreshCw :size="11" :stroke-width="2.5" />
         Retry
       </button>
     </div>

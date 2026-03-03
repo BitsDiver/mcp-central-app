@@ -30,6 +30,7 @@ export interface User {
   email: string;
   name: string;
   role: "admin" | "user";
+  isDisabled?: boolean;
   createdAt: string;
 }
 
@@ -141,6 +142,15 @@ export interface UpstreamStatus {
   toolCount: number;
   lastError: string | null;
   lastConnectedAt: string | null;
+}
+
+export interface ConnectedMcpClient {
+  sessionId: string;
+  tenantId: string;
+  clientName: string | null;
+  clientVersion: string | null;
+  userAgent: string | null;
+  connectedAt: string;
 }
 
 export interface ApiError {

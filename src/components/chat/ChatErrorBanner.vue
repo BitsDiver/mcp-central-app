@@ -1,4 +1,6 @@
 <script setup lang="ts">
+    import { CircleAlert, X } from 'lucide-vue-next';
+
     defineProps<{
         error: string;
     }>();
@@ -10,15 +12,10 @@
 
 <template>
     <div class="error-banner">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 8v4M12 16h.01" stroke-linecap="round" />
-        </svg>
+        <CircleAlert :size="14" :stroke-width="2" />
         <span>{{ error }}</span>
         <button type="button" class="error-dismiss" @click="$emit('dismiss')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" />
-            </svg>
+            <X :size="12" :stroke-width="2.5" />
         </button>
     </div>
 </template>

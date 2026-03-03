@@ -1,6 +1,7 @@
 <script setup lang="ts">
     import { ref, computed, watch, nextTick, type Component } from 'vue';
     import { onClickOutside } from '@vueuse/core';
+    import { ChevronDown, Search, Check } from 'lucide-vue-next';
 
     /* ── Types ─────────────────────────────────────────────────── */
     export interface ListboxOption {
@@ -253,10 +254,7 @@
             <span v-else class="lb-trigger-placeholder">{{ placeholder }}</span>
 
             <!-- Chevron -->
-            <svg class="lb-chevron" :class="{ 'lb-chevron--open': open }" width="13" height="13" viewBox="0 0 24 24"
-                fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
+            <ChevronDown class="lb-chevron" :class="{ 'lb-chevron--open': open }" :size="13" :stroke-width="2.5" />
         </button>
 
         <!-- ── Dropdown panel (teleported to body to escape overflow) ── -->
@@ -266,11 +264,7 @@
                     :style="panelPos">
                     <!-- Search input -->
                     <div v-if="searchable" class="lb-search-wrap">
-                        <svg class="lb-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8" />
-                            <path d="m21 21-4.3-4.3" stroke-linecap="round" />
-                        </svg>
+                        <Search class="lb-search-icon" :size="13" :stroke-width="2" />
                         <input ref="searchInputRef" v-model="search" type="text" class="lb-search" placeholder="Search…"
                             @keydown.stop="onKeydown" />
                     </div>
@@ -307,14 +301,12 @@
                                 <span class="lb-option-body">
                                     <span class="lb-option-label">{{ option.label }}</span>
                                     <span v-if="option.description" class="lb-option-desc">{{ option.description
-                                        }}</span>
+                                    }}</span>
                                 </span>
 
                                 <!-- Check mark -->
-                                <svg v-if="option.value === modelValue" class="lb-option-check" width="14" height="14"
-                                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                    <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
-                                </svg>
+                                <Check v-if="option.value === modelValue" class="lb-option-check" :size="14"
+                                    :stroke-width="2.5" />
                             </button>
                         </template>
 

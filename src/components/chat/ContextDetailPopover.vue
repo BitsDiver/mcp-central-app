@@ -1,5 +1,6 @@
 <script setup lang="ts">
     import { computed } from 'vue';
+    import { X } from 'lucide-vue-next';
     import { useChatStore } from '@/stores/chat';
     import { useChatSettingsStore } from '@/stores/chatSettings';
     import { useToolStore } from '@/stores/tools';
@@ -131,10 +132,7 @@
             <div class="popover-header">
                 <span class="popover-title">Context Window</span>
                 <button type="button" class="popover-close" @click="$emit('close')">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2.5">
-                        <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" />
-                    </svg>
+                    <X :size="12" :stroke-width="2.5" />
                 </button>
             </div>
 

@@ -2,7 +2,10 @@
     <AppLayout>
         <div class="help-view">
             <div class="help-hero">
-                <h1 class="help-title">Help &amp; Documentation</h1>
+                <h1 class="help-title flex items-center gap-2">
+                    <CircleHelp :size="24" :stroke-width="2" />
+                    Help &amp; Documentation
+                </h1>
                 <p class="help-subtitle">
                     Everything you need to know about setting up and using MCP Central.
                 </p>
@@ -12,15 +15,9 @@
                 <!-- Quick Start -->
                 <details class="help-accordion" open>
                     <summary class="help-accordion-header">
-                        <svg class="help-accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <polygon points="5 3 19 12 5 21 5 3" />
-                        </svg>
+                        <Play class="help-accordion-icon" :size="18" :stroke-width="2" />
                         <span>Quick Start</span>
-                        <svg class="help-accordion-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <polyline points="6 9 12 15 18 9" />
-                        </svg>
+                        <ChevronDown class="help-accordion-chevron" :size="16" :stroke-width="2" />
                     </summary>
                     <div class="help-accordion-body">
                         <ol class="help-steps">
@@ -58,16 +55,9 @@
                 <!-- Endpoints & Tools -->
                 <details class="help-accordion">
                     <summary class="help-accordion-header">
-                        <svg class="help-accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                            <path d="M16 3H8a2 2 0 0 0-2 2v2h12V5a2 2 0 0 0-2-2z" />
-                        </svg>
+                        <Briefcase class="help-accordion-icon" :size="18" :stroke-width="2" />
                         <span>Endpoints &amp; Tools</span>
-                        <svg class="help-accordion-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <polyline points="6 9 12 15 18 9" />
-                        </svg>
+                        <ChevronDown class="help-accordion-chevron" :size="16" :stroke-width="2" />
                     </summary>
                     <div class="help-accordion-body">
                         <h3>Transport types</h3>
@@ -118,15 +108,9 @@
                 <!-- Chat & AI modes -->
                 <details class="help-accordion">
                     <summary class="help-accordion-header">
-                        <svg class="help-accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                        </svg>
+                        <MessageSquare class="help-accordion-icon" :size="18" :stroke-width="2" />
                         <span>Chat &amp; AI Modes</span>
-                        <svg class="help-accordion-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <polyline points="6 9 12 15 18 9" />
-                        </svg>
+                        <ChevronDown class="help-accordion-chevron" :size="16" :stroke-width="2" />
                     </summary>
                     <div class="help-accordion-body">
                         <table class="help-table">
@@ -175,16 +159,9 @@
                 <!-- API Keys & A2A -->
                 <details class="help-accordion">
                     <summary class="help-accordion-header">
-                        <svg class="help-accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path
-                                d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4" />
-                        </svg>
+                        <KeyRound class="help-accordion-icon" :size="18" :stroke-width="2" />
                         <span>API Keys &amp; A2A</span>
-                        <svg class="help-accordion-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <polyline points="6 9 12 15 18 9" />
-                        </svg>
+                        <ChevronDown class="help-accordion-chevron" :size="16" :stroke-width="2" />
                     </summary>
                     <div class="help-accordion-body">
                         <h3>API Keys</h3>
@@ -219,16 +196,9 @@
                 <!-- External links -->
                 <details class="help-accordion">
                     <summary class="help-accordion-header">
-                        <svg class="help-accordion-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                        </svg>
+                        <Link class="help-accordion-icon" :size="18" :stroke-width="2" />
                         <span>External Links</span>
-                        <svg class="help-accordion-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <polyline points="6 9 12 15 18 9" />
-                        </svg>
+                        <ChevronDown class="help-accordion-chevron" :size="16" :stroke-width="2" />
                     </summary>
                     <div class="help-accordion-body">
                         <ul class="help-links">
@@ -260,6 +230,7 @@
 
 <script setup lang="ts">
     import AppLayout from "@/components/layout/AppLayout.vue";
+    import { Play, Briefcase, MessageSquare, KeyRound, Link, ChevronDown, CircleHelp } from 'lucide-vue-next';
 </script>
 
 <style scoped>

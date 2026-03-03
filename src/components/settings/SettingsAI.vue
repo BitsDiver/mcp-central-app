@@ -1,5 +1,6 @@
 <script setup lang="ts">
     import { ref, computed, onMounted, watch } from 'vue';
+    import { Radio, Loader2, CircleAlert, ShieldCheck } from 'lucide-vue-next';
     import { useChatSettingsStore, PROVIDER_DEFAULT_MODELS, MODEL_CONTEXT_LIMITS, DEFAULT_MAX_CONTEXT, DEFAULT_MAX_ITERATIONS, DEFAULT_SYSTEM_PROMPT } from '@/stores/chatSettings';
     import { useAiKeysStore } from '@/stores/aiKeys';
     import AppListbox from '@/components/ui/AppListbox.vue';
@@ -223,19 +224,8 @@
                             class="absolute right-2 flex items-center justify-center w-6 h-6 rounded transition-colors duration-150 disabled:opacity-40"
                             style="color: var(--text-secondary);" onmouseenter="this.style.color='var(--text-primary)'"
                             onmouseleave="this.style.color='var(--text-secondary)'">
-                            <svg v-if="!chatSettings.isLoadingModels" width="15" height="15" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                stroke-linejoin="round">
-                                <path d="M5.636 18.364a9 9 0 0 1 0-12.728" />
-                                <path d="M18.364 5.636a9 9 0 0 1 0 12.728" />
-                                <path d="M8.464 15.536a5 5 0 0 1 0-7.072" />
-                                <path d="M15.536 8.464a5 5 0 0 1 0 7.072" />
-                                <circle cx="12" cy="12" r="1" fill="currentColor" />
-                            </svg>
-                            <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2" class="animate-spin">
-                                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                            </svg>
+                            <Radio v-if="!chatSettings.isLoadingModels" :size="15" />
+                            <Loader2 v-else :size="15" class="animate-spin" />
                         </button>
                     </div>
                     <p class="text-xs" style="color: var(--text-tertiary)">The base URL of your running Ollama instance
@@ -276,10 +266,7 @@
 
                 <div v-if="chatSettings.modelLoadError" class="flex items-center gap-2 px-3 py-2 rounded-lg text-xs"
                     style="background: var(--color-danger-50); color: var(--color-danger-700);">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M12 8v4M12 16h.01" stroke-linecap="round" />
-                    </svg>
+                    <CircleAlert :size="13" />
                     {{ chatSettings.modelLoadError }}
                 </div>
 
@@ -291,14 +278,7 @@
                     <p v-if="chatSettings.availableModels.length === 0 && !chatSettings.modelLoadError"
                         class="text-xs mt-1" style="color: var(--text-tertiary);">
                         Click the
-                        <svg class="inline-block -mt-0.5" width="12" height="12" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M5.636 18.364a9 9 0 0 1 0-12.728" />
-                            <path d="M18.364 5.636a9 9 0 0 1 0 12.728" />
-                            <path d="M8.464 15.536a5 5 0 0 1 0-7.072" />
-                            <path d="M15.536 8.464a5 5 0 0 1 0 7.072" />
-                            <circle cx="12" cy="12" r="1" fill="currentColor" />
-                        </svg>
+                        <Radio class="inline-block -mt-0.5" :size="12" />
                         button after starting Ollama
                     </p>
                 </div>
@@ -319,12 +299,7 @@
                     <div v-if="currentKeyInfo" class="flex items-center gap-2">
                         <div class="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border text-xs"
                             style="background: var(--color-success-50, #f0fdf4); border-color: var(--color-success-200, #bbf7d0); color: var(--color-success-700, #15803d);">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path
-                                    d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 01-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 011-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 011.52 0C14.51 3.81 17 5 19 5a1 1 0 011 1z" />
-                                <polyline points="9 12 11 14 15 10" />
-                            </svg>
+                            <ShieldCheck :size="13" />
                             Key saved — ends in
                             <code
                                 style="font-family: var(--font-mono); font-size: 11px;">…{{ currentKeyInfo.keyHint }}</code>
@@ -356,11 +331,7 @@
 
                     <div v-if="keyError || aiKeys.error" class="flex items-center gap-2 px-3 py-2 rounded-lg text-xs"
                         style="background: var(--color-danger-50); color: var(--color-danger-700);">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <circle cx="12" cy="12" r="10" />
-                            <path d="M12 8v4M12 16h.01" stroke-linecap="round" />
-                        </svg>
+                        <CircleAlert :size="13" />
                         {{ keyError ?? aiKeys.error }}
                     </div>
                 </div>
@@ -401,7 +372,7 @@
                 <p class="text-xs" style="color: var(--text-tertiary);">
                     <template v-if="draftModel && MODEL_CONTEXT_LIMITS[draftModel]">
                         Maximum pour <strong class="font-medium" style="color: var(--text-secondary);">{{ draftModel
-                            }}</strong> : {{ fmtTokens(maxContextSize) }}
+                        }}</strong> : {{ fmtTokens(maxContextSize) }}
                     </template>
                     <template v-else>
                         Maximum (par défaut) : {{ fmtTokens(maxContextSize) }}

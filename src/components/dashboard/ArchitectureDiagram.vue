@@ -1,18 +1,46 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, ref, onMounted, markRaw, type Component } from 'vue';
+  import { Monitor, Layers, Plus, Wrench, X, Router } from 'lucide-vue-next';
   import AppToggle from '@/components/ui/AppToggle.vue';
   import AddAgentModal from '@/components/endpoints/AddAgentModal.vue';
   import { useStatusStore } from '@/stores/status';
   import { useToolStore } from '@/stores/tools';
   import { useEndpointStore } from '@/stores/endpoints';
   import { useAgentStore } from '@/stores/agents';
+  import { useMcpClientsStore } from '@/stores/mcpClients';
   import { emitTools } from '@/api/socket';
   import type { Tool } from '@/types';
+
+  // AI client brand icons
+  import IconVSCode from '@/components/icons/IconVSCode.vue';
+  import IconCursor from '@/components/icons/IconCursor.vue';
+  import IconWindsurf from '@/components/icons/IconWindsurf.vue';
+  import IconZed from '@/components/icons/IconZed.vue';
+  import IconCline from '@/components/icons/IconCline.vue';
+  import IconJetBrains from '@/components/icons/IconJetBrains.vue';
+  import IconOpenWebUI from '@/components/icons/IconOpenWebUI.vue';
+  import IconAntigravity from '@/components/icons/IconAntigravity.vue';
+
+  const CLIENT_ICONS: Record<string, Component> = {
+    vscode: markRaw(IconVSCode),
+    cursor: markRaw(IconCursor),
+    windsurf: markRaw(IconWindsurf),
+    zed: markRaw(IconZed),
+    cline: markRaw(IconCline),
+    jetbrains: markRaw(IconJetBrains),
+    openwebui: markRaw(IconOpenWebUI),
+    antigravity: markRaw(IconAntigravity),
+  };
 
   const statusStore = useStatusStore();
   const toolStore = useToolStore();
   const endpointStore = useEndpointStore();
   const agentStore = useAgentStore();
+  const mcpClientsStore = useMcpClientsStore();
+
+  onMounted(() => {
+    mcpClientsStore.load();
+  });
 
   /** Upstreams without an agent — shown in the main row */
   const directUpstreams = computed(() => {
@@ -155,16 +183,24 @@
 
       <!-- Node: Your machine -->
       <div class="arch-node">
-        <div class="arch-node-icon" style="background: var(--bg-muted); border-color: var(--border-strong);">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-            style="color: var(--text-secondary);">
-            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-            <line x1="8" y1="21" x2="16" y2="21" />
-            <line x1="12" y1="17" x2="12" y2="21" />
-          </svg>
+        <div class="arch-node-icon" style="background: rgba(16,185,129,0.1); border-color: #10b981;">
+          <Monitor :size="28" :stroke-width="1.5" color="#10b981" />
         </div>
         <span class="arch-node-label" style="color: var(--text-primary);">Your machine</span>
-        <span class="arch-node-sub" style="color: var(--text-tertiary);">AI Client / IDE</span>
+        <span v-if="mcpClientsStore.uniqueClients.length === 0" class="arch-node-sub"
+          style="color: var(--text-tertiary);">AI Client / IDE</span>
+        <div v-else class="connected-clients">
+          <div v-for="entry in mcpClientsStore.uniqueClients" :key="entry.identified.displayName" class="client-entry"
+            :title="entry.count > 1 ? `${entry.count} sessions` : '1 session'">
+            <span v-if="entry.identified.clientId && CLIENT_ICONS[entry.identified.clientId]" class="client-icon"
+              :style="`color: ${entry.identified.brandColor};`">
+              <component :is="CLIENT_ICONS[entry.identified.clientId]" />
+            </span>
+            <span v-else class="client-icon-dot" :style="`background: ${entry.identified.brandColor};`"></span>
+            <span class="client-label" style="color: var(--text-tertiary);">{{ entry.identified.displayName }}<template
+                v-if="entry.count > 1"> ×{{ entry.count }}</template></span>
+          </div>
+        </div>
       </div>
 
       <!-- Connector: Tenant API Key -->
@@ -184,16 +220,14 @@
         <div class="arch-node-icon relative cursor-pointer"
           style="background: rgba(59,130,246,0.1); border-color: #3b82f6; width: 4rem; height: 4rem;"
           title="Add local agent" @click="showAgentModal = true">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.75">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-          </svg>
+          <Layers :size="30" :stroke-width="1.75" color="#3b82f6" />
           <span class="absolute -top-1.5 -right-1.5 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
             <svg width="8" height="8" viewBox="0 0 24 24" fill="white" stroke="white" stroke-width="3">
               <path d="M20 7l-11 11-4-4" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </span>
         </div>
-        <span class="arch-node-label text-blue-500">central-MCP</span>
+        <span class="arch-node-label text-blue-500">MCP Central</span>
         <span class="arch-node-sub" style="color: var(--text-tertiary);">Proxy &amp; Auth</span>
       </div>
 
@@ -233,11 +267,7 @@
           <!-- Empty state / always-visible Add endpoint row -->
           <router-link to="/endpoints" class="endpoint-row border-dashed"
             style="border-color: var(--border-default); text-decoration: none;">
-            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" style="color: var(--text-tertiary); flex-shrink: 0;">
-              <line x1="7" y1="1" x2="7" y2="13" />
-              <line x1="1" y1="7" x2="13" y2="7" />
-            </svg>
+            <Plus :size="11" :stroke-width="2" style="color: var(--text-tertiary); flex-shrink: 0;" />
             <span class="text-xs" style="color: var(--text-tertiary);">Add MCP Server</span>
           </router-link>
         </div>
@@ -261,20 +291,14 @@
     <!-- ── Agent tunnel rows ─────────────────────────────── -->
     <div v-if="agentStore.agents.length > 0" class="agents-outer">
       <div class="agents-outer-header">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2">
-          <rect x="2" y="3" width="20" height="14" rx="2" />
-          <path d="M8 21h8M12 17v4" />
-        </svg>
+        <Router :size="12" :stroke-width="2" color="#8b5cf6" />
         <span>Via local agents</span>
       </div>
       <div v-for="cluster in agentClusters" :key="cluster.agent.id" class="agent-tunnel-row">
         <!-- Orange agent node -->
         <div class="arch-node">
           <div class="arch-node-icon" style="background: rgba(139,92,246,0.10); border-color: #8b5cf6;">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="1.75">
-              <rect x="2" y="3" width="20" height="14" rx="2" />
-              <path d="M8 21h8M12 17v4" />
-            </svg>
+            <Router :size="26" :stroke-width="1.75" color="#8b5cf6" />
           </div>
           <span class="arch-node-label" style="color: #8b5cf6;">{{ cluster.agent.name }}</span>
           <span class="arch-node-sub"
@@ -313,11 +337,7 @@
             <!-- Always-visible Add endpoint row for this agent -->
             <router-link to="/endpoints" class="endpoint-row border-dashed"
               style="border-color: rgba(139,92,246,0.3); text-decoration: none;">
-              <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="#8b5cf6" stroke-width="2"
-                stroke-linecap="round" style="flex-shrink: 0;">
-                <line x1="7" y1="1" x2="7" y2="13" />
-                <line x1="1" y1="7" x2="13" y2="7" />
-              </svg>
+              <Plus :size="11" :stroke-width="2" style="flex-shrink: 0; color: #8b5cf6;" />
               <span class="text-xs" style="color: #8b5cf6;">Add MCP Server</span>
             </router-link>
           </div>
@@ -343,19 +363,13 @@
           <!-- Header with close button -->
           <div class="endpoint-tooltip-header"
             style="color: var(--text-primary); border-color: var(--border-default); background: var(--bg-overlay);">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path
-                d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"
-                stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
+            <Wrench :size="11" :stroke-width="2" />
             <span class="truncate">{{ activeEndpoint.namespace }}</span>
             <span class="tool-badge ml-1 shrink-0">{{ toolStore.getActiveCountForEndpoint(activeEndpoint.endpointId)
               }}/{{ toolStore.getTotalCountForEndpoint(activeEndpoint.endpointId) || activeEndpoint.toolCount }}</span>
             <button class="ml-auto shrink-0 opacity-50 hover:opacity-100 transition-opacity"
               style="color: var(--text-primary);" @click.stop="closePanel">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" />
-              </svg>
+              <X :size="12" :stroke-width="2.5" />
             </button>
           </div>
           <!-- Full scrollable list -->
@@ -401,7 +415,7 @@
         <span style="color: var(--text-secondary);">Disconnected</span>
       </div>
       <div class="ml-auto text-[11px]" style="color: var(--text-tertiary);">
-        AI client authenticates with the tenant API key. Each MCP server should use its own credentials.
+        AI client authenticates with the tenant API key. Each client should use its own credentials.
       </div>
     </div>
   </div>
@@ -547,6 +561,49 @@
     font-size: 0.625rem;
     margin-top: 0.125rem;
     text-align: center;
+  }
+
+  /* ── Connected clients (pills under "Your machine") ────── */
+  .connected-clients {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    margin-top: 4px;
+  }
+
+  .client-entry {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .client-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .client-icon :deep(svg) {
+    width: 100%;
+    height: 100%;
+    border-radius: 3px;
+  }
+
+  .client-icon-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .client-label {
+    font-size: 10px;
+    font-weight: 500;
+    white-space: nowrap;
   }
 
   /* ── Connectors ─────────────────────────────────────────── */

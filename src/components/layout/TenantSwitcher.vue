@@ -6,6 +6,7 @@
   import { useEndpointStore } from '@/stores/endpoints';
   import { useToolStore } from '@/stores/tools';
   import { useStatusStore } from '@/stores/status';
+  import { Building, Loader, ChevronDown, Check, Plus } from 'lucide-vue-next';
 
   const tenantStore = useTenantStore();
   const socketStore = useSocketStore();
@@ -78,24 +79,12 @@
     <!-- Trigger button -->
     <button @click="open = !open" :disabled="switching" class="ts-trigger">
       <!-- Building icon -->
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-        class="ts-trigger-icon">
-        <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5" stroke-linecap="round"
-          stroke-linejoin="round" />
-      </svg>
+      <Building :size="15" :stroke-width="2" class="ts-trigger-icon" />
       <span v-if="tenantStore.selectedTenant" class="ts-trigger-name">{{ tenantStore.selectedTenant.name }}</span>
       <span v-else class="ts-trigger-placeholder">Select workspace…</span>
       <!-- Spinner while switching, chevron otherwise -->
-      <svg v-if="switching" class="ts-spinner" width="14" height="14" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2.5">
-        <path
-          d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
-          stroke-linecap="round" />
-      </svg>
-      <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-        class="ts-chevron" :class="{ 'ts-chevron--open': open }">
-        <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
+      <Loader v-if="switching" :size="14" :stroke-width="2.5" class="ts-spinner" />
+      <ChevronDown v-else :size="13" :stroke-width="2.5" class="ts-chevron" :class="{ 'ts-chevron--open': open }" />
     </button>
 
     <!-- Dropdown -->
@@ -117,10 +106,8 @@
               {{ tenant.name.charAt(0).toUpperCase() }}
             </span>
             <span class="ts-item-name">{{ tenant.name }}</span>
-            <svg v-if="tenantStore.selectedTenant?.id === tenant.id" width="14" height="14" viewBox="0 0 24 24"
-              fill="none" stroke="currentColor" stroke-width="2.5" class="ts-item-check">
-              <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
+            <Check v-if="tenantStore.selectedTenant?.id === tenant.id" :size="14" :stroke-width="2.5"
+              class="ts-item-check" />
           </button>
           <p v-if="tenantStore.tenants.length === 0" class="ts-empty">No workspaces yet</p>
         </div>
@@ -129,9 +116,7 @@
         <div class="ts-footer">
           <template v-if="!creatingTenant">
             <button type="button" class="ts-new-btn" @click="openCreateForm">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M12 5v14M5 12h14" stroke-linecap="round" />
-              </svg>
+              <Plus :size="13" :stroke-width="2.5" />
               New workspace
             </button>
           </template>
@@ -140,15 +125,8 @@
               <input ref="newTenantInput" v-model="newTenantName" type="text" placeholder="Workspace name…"
                 class="ts-create-input" :disabled="isCreating" @keydown.esc="creatingTenant = false" />
               <button type="submit" class="ts-create-confirm" :disabled="!newTenantName.trim() || isCreating">
-                <svg v-if="isCreating" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  stroke-width="2.5">
-                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"
-                    stroke-linecap="round" />
-                </svg>
-                <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                  stroke-width="2.5">
-                  <path d="M20 6L9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <Loader v-if="isCreating" :size="12" :stroke-width="2.5" />
+                <Check v-else :size="12" :stroke-width="2.5" />
               </button>
             </form>
           </template>

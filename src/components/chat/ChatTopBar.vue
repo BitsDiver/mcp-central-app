@@ -1,5 +1,6 @@
 <script setup lang="ts">
     import AppToggle from '@/components/ui/AppToggle.vue';
+    import { Menu, Pencil } from 'lucide-vue-next';
     import type { ChatSession } from '@/types';
 
     defineProps<{
@@ -20,9 +21,7 @@
     <div class="chat-topbar">
         <button type="button" class="topbar-btn" :title="sidebarOpen ? 'Hide sessions' : 'Show sessions'"
             @click="$emit('update:sidebarOpen', !sidebarOpen)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 12h18M3 6h18M3 18h18" stroke-linecap="round" />
-            </svg>
+            <Menu :size="16" :stroke-width="2" />
         </button>
 
         <div class="topbar-center">
@@ -37,11 +36,7 @@
                 'prompt-override-btn--modified': !!session?.systemPrompt,
             }" :title="showSessionPrompt ? 'Hide session prompt' : 'Override system prompt for this session'"
                 @click="$emit('update:showSessionPrompt', !showSessionPrompt)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 20h9" stroke-linecap="round" />
-                    <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" stroke-linecap="round"
-                        stroke-linejoin="round" />
-                </svg>
+                <Pencil :size="14" :stroke-width="2" />
                 <span class="prompt-override-label">System Prompt</span>
                 <span v-if="session?.systemPrompt" class="prompt-override-dot" />
             </button>

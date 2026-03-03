@@ -1,44 +1,88 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import AppButton from '@/components/ui/AppButton.vue'
-import SkeletonBlock from '@/components/ui/SkeletonBlock.vue'
-import EmptyState from '@/components/ui/EmptyState.vue'
-import { useAuthStore } from '@/stores/auth'
-import { useUsersStore } from '@/stores/users'
-import { useToastStore } from '@/stores/toast'
+  import { ref, onMounted, computed } from 'vue';
+  import { RefreshCw, Search, Users, ShieldCheck, ShieldOff, Ban, CheckCircle, Crown } from 'lucide-vue-next';
+  import AppButton from '@/components/ui/AppButton.vue';
+  import SkeletonBlock from '@/components/ui/SkeletonBlock.vue';
+  import EmptyState from '@/components/ui/EmptyState.vue';
+  import { useAuthStore } from '@/stores/auth';
+  import { useUsersStore } from '@/stores/users';
+  import { useToastStore } from '@/stores/toast';
 
-const authStore = useAuthStore()
-const usersStore = useUsersStore()
-const toast = useToastStore()
+  const authStore = useAuthStore();
+  const usersStore = useUsersStore();
+  const toast = useToastStore();
 
-const search = ref('')
-const roleUpdating = ref<string | null>(null)
+  const search = ref('');
+  const actionLoading = ref<string | null>(null);
 
-async function loadUsers() {
-  if (!usersStore.isConnected) {
-    await usersStore.connect()
+  async function loadUsers() {
+    if (!usersStore.isConnected) {
+      await usersStore.connect();
+    }
+    await usersStore.listUsers(search.value || undefined);
   }
-  await usersStore.listUsers(search.value || undefined)
-}
 
-onMounted(() => {
-  loadUsers()
-})
+  onMounted(() => {
+    loadUsers();
+  });
 
-async function toggleRole(userId: string, current: 'admin' | 'user') {
-  roleUpdating.value = userId
-  try {
-    await usersStore.updateRole(userId, current === 'admin' ? 'user' : 'admin')
-  } catch (err: any) {
-    toast.error(err?.message ?? 'Failed to update role.')
-  } finally {
-    roleUpdating.value = null
+  const filteredUsers = computed(() => {
+    if (!search.value) return usersStore.users;
+    const q = search.value.toLowerCase();
+    return usersStore.users.filter(
+      (u) => u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q),
+    );
+  });
+
+  async function toggleRole(userId: string, current: 'admin' | 'user') {
+    actionLoading.value = userId;
+    try {
+      await usersStore.updateRole(userId, current === 'admin' ? 'user' : 'admin');
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Failed to update role.');
+    } finally {
+      actionLoading.value = null;
+    }
   }
-}
 
-function formatDate(d: string): string {
-  return new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(d))
-}
+  async function toggleDisabled(userId: string, isDisabled: boolean) {
+    actionLoading.value = userId;
+    try {
+      if (isDisabled) {
+        await usersStore.enableUser(userId);
+        toast.success('Account re-enabled.');
+      } else {
+        await usersStore.disableUser(userId);
+        toast.success('Account disabled.');
+      }
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Failed to update account status.');
+    } finally {
+      actionLoading.value = null;
+    }
+  }
+
+  function formatDate(d: string): string {
+    return new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(d));
+  }
+
+  function initials(name: string | null, email: string | null): string {
+    if (name) {
+      const parts = name.split(' ').filter(Boolean);
+      return parts.length >= 2
+        ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+        : name.slice(0, 2).toUpperCase();
+    }
+    if (email) return email.slice(0, 2).toUpperCase();
+    return '??';
+  }
+
+  function planLabel(plan: string | null): string {
+    if (!plan || plan === 'free') return 'Free';
+    if (plan === 'pro') return 'Pro';
+    if (plan === 'enterprise') return 'Enterprise';
+    return plan;
+  }
 </script>
 
 <template>
@@ -46,12 +90,10 @@ function formatDate(d: string): string {
     <div class="flex items-center justify-between mb-5">
       <div>
         <h2 class="text-base font-semibold" style="color: var(--text-primary);">Users</h2>
-        <p class="text-sm mt-0.5" style="color: var(--text-secondary);">Manage user accounts and roles</p>
+        <p class="text-sm mt-0.5" style="color: var(--text-secondary);">Manage user accounts, roles and access</p>
       </div>
       <AppButton variant="secondary" @click="loadUsers">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <RefreshCw :size="15" />
         Refresh
       </AppButton>
     </div>
@@ -59,26 +101,21 @@ function formatDate(d: string): string {
     <!-- Search -->
     <div class="mb-4">
       <div class="relative max-w-xs">
-        <input
-          v-model="search"
-          @keyup.enter="loadUsers"
-          placeholder="Search by name or email…"
+        <input v-model="search" @keyup.enter="loadUsers" placeholder="Search by name or email…"
           class="w-full pl-9 pr-3 py-2 text-sm rounded-lg border outline-none transition-colors duration-150"
-          style="background: var(--bg-input); color: var(--text-primary); border-color: var(--border-default);"
-        />
-        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-tertiary);">
-          <circle cx="11" cy="11" r="8"/>
-          <path d="M21 21l-4.35-4.35"/>
-        </svg>
+          style="background: var(--bg-input); color: var(--text-primary); border-color: var(--border-default);" />
+        <Search class="absolute left-2.5 top-1/2 -translate-y-1/2" :size="14" style="color: var(--text-tertiary);" />
       </div>
     </div>
 
     <!-- Loading -->
-    <div v-if="usersStore.isLoading" class="card overflow-hidden">
-      <div v-for="i in 4" :key="i" class="flex items-center gap-4 px-5 py-4 border-b" style="border-color: var(--border-default);">
-        <SkeletonBlock height="1rem" width="30%" />
-        <SkeletonBlock height="1rem" width="35%" />
-        <SkeletonBlock height="1rem" width="15%" />
+    <div v-if="usersStore.isLoading" class="space-y-3">
+      <div v-for="i in 4" :key="i" class="card flex items-center gap-4 px-5 py-4">
+        <SkeletonBlock height="2.5rem" width="2.5rem" class="rounded-full shrink-0" />
+        <div class="flex-1 space-y-2">
+          <SkeletonBlock height="0.875rem" width="40%" />
+          <SkeletonBlock height="0.75rem" width="55%" />
+        </div>
       </div>
     </div>
 
@@ -89,58 +126,78 @@ function formatDate(d: string): string {
     </div>
 
     <!-- Empty prompt -->
-    <EmptyState
-      v-else-if="usersStore.users.length === 0"
-      title="No users loaded"
-      description="Click Refresh to load all users."
-    >
+    <EmptyState v-else-if="usersStore.users.length === 0" title="No users loaded"
+      description="Click Refresh to load all users.">
       <template #icon>
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--text-tertiary);">
-          <path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <Users :size="24" :stroke-width="1.5" style="color: var(--text-tertiary);" />
       </template>
       <AppButton size="sm" @click="loadUsers">Load Users</AppButton>
     </EmptyState>
 
-    <!-- Table -->
-    <div v-else class="card overflow-hidden">
-      <table class="w-full text-sm">
-        <thead>
-          <tr class="border-b" style="border-color: var(--border-default);">
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">Name</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden sm:table-cell" style="color: var(--text-tertiary);">Email</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style="color: var(--text-tertiary);">Joined</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-tertiary);">Role</th>
-            <th class="px-5 py-3" />
-          </tr>
-        </thead>
-        <tbody class="divide-y" style="border-color: var(--border-default);">
-          <tr
-            v-for="user in usersStore.users"
-            :key="user.id"
-            class="hover:bg-[var(--bg-hover)] transition-colors"
-          >
-            <td class="px-5 py-3 font-medium" style="color: var(--text-primary);">{{ user.name ?? '—' }}</td>
-            <td class="px-5 py-3 hidden sm:table-cell" style="color: var(--text-secondary);">{{ user.email ?? '—' }}</td>
-            <td class="px-5 py-3 hidden md:table-cell" style="color: var(--text-secondary);">{{ formatDate(user.createdAt) }}</td>
-            <td class="px-5 py-3">
-              <span :class="['badge', user.role === 'admin' ? 'badge-primary' : 'badge-neutral']">{{ user.role }}</span>
-            </td>
-            <td class="px-5 py-3 text-right">
-              <AppButton
-                v-if="user.id !== authStore.user?.id"
-                variant="ghost"
-                size="sm"
-                :loading="roleUpdating === user.id"
-                @click="toggleRole(user.id, user.role)"
-              >
-                {{ user.role === 'admin' ? 'Demote' : 'Promote' }}
-              </AppButton>
-              <span v-else class="text-xs" style="color: var(--text-tertiary);">You</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- User cards -->
+    <div v-else class="space-y-2">
+      <div v-for="user in filteredUsers" :key="user.id" class="card px-5 py-4 flex items-center gap-4 transition-colors"
+        :class="{ 'opacity-50': user.isDisabled }">
+        <!-- Avatar -->
+        <div class="w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold shrink-0" :style="{
+          background: user.isDisabled ? 'var(--bg-tertiary)' : 'var(--color-primary-100)',
+          color: user.isDisabled ? 'var(--text-tertiary)' : 'var(--color-primary-700)',
+        }">
+          {{ initials(user.name, user.email) }}
+        </div>
+
+        <!-- Info -->
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-medium truncate" style="color: var(--text-primary);">
+              {{ user.name ?? '—' }}
+            </span>
+            <span v-if="user.role === 'admin'" class="badge badge-primary flex items-center gap-1">
+              <Crown :size="10" />
+              admin
+            </span>
+            <span v-else class="badge badge-neutral">user</span>
+            <span v-if="user.isDisabled" class="badge flex items-center gap-1 text-[10px]"
+              style="background: var(--color-danger-100); color: var(--color-danger-700);">
+              <Ban :size="10" />
+              disabled
+            </span>
+            <span class="badge badge-neutral text-[10px]" :title="'Subscription: ' + planLabel(user.subscriptionPlan)">
+              {{ planLabel(user.subscriptionPlan) }}
+            </span>
+          </div>
+          <div class="flex items-center gap-3 mt-0.5">
+            <span class="text-xs truncate" style="color: var(--text-secondary);">
+              {{ user.email ?? 'No email' }}
+            </span>
+            <span class="text-xs hidden sm:inline" style="color: var(--text-tertiary);">
+              Joined {{ formatDate(user.createdAt) }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div v-if="user.id !== authStore.user?.id" class="flex items-center gap-1 shrink-0">
+          <!-- Toggle role -->
+          <button class="p-1.5 rounded-md transition-colors hover:bg-[var(--bg-hover)]"
+            :title="user.role === 'admin' ? 'Demote to user' : 'Promote to admin'" :disabled="actionLoading === user.id"
+            @click="toggleRole(user.id, user.role)">
+            <ShieldCheck v-if="user.role !== 'admin'" :size="16" style="color: var(--color-primary-500);" />
+            <ShieldOff v-else :size="16" style="color: var(--text-tertiary);" />
+          </button>
+
+          <!-- Toggle disable -->
+          <button class="p-1.5 rounded-md transition-colors hover:bg-[var(--bg-hover)]"
+            :title="user.isDisabled ? 'Enable account' : 'Disable account'" :disabled="actionLoading === user.id"
+            @click="toggleDisabled(user.id, user.isDisabled)">
+            <CheckCircle v-if="user.isDisabled" :size="16" style="color: var(--color-success-500);" />
+            <Ban v-else :size="16" style="color: var(--color-danger-500);" />
+          </button>
+        </div>
+
+        <!-- Self marker -->
+        <span v-else class="text-xs shrink-0" style="color: var(--text-tertiary);">You</span>
+      </div>
     </div>
   </div>
 </template>

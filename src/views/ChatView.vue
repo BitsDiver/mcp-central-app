@@ -14,6 +14,7 @@
   import { useChatGeneration } from '@/composables/useChatGeneration';
   import { useChatMcpSession } from '@/composables/useChatMcpSession';
   import { useSidebarResize } from '@/composables/useSidebarResize';
+  import { TriangleAlert } from 'lucide-vue-next';
 
   // ── Stores ─────────────────────────────────────────────────
   const chatStore = useChatStore();
@@ -122,13 +123,22 @@
 
         <ChatSessionPromptBar :session="session" :visible="showSessionPrompt" />
 
+        <!-- Work-in-progress banner -->
+        <div class="wip-banner">
+          <TriangleAlert :size="16" :stroke-width="2" class="wip-icon" />
+          <span>
+            🚧 This feature is under active development and may be incomplete.
+            If you have experience with the
+            <a href="https://sdk.vercel.ai/" target="_blank" rel="noopener" class="wip-link">Vercel AI SDK</a>,
+            consider
+            <a href="https://github.com/BitsDiver/mcp-central" target="_blank" rel="noopener"
+              class="wip-link">contributing on GitHub</a>!
+          </span>
+        </div>
+
         <!-- Config warning (inline — too small to warrant its own file) -->
         <div v-if="!isConfigured" class="config-warning">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path
-              d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
-              stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <TriangleAlert :size="16" :stroke-width="2" />
           <template v-if="settingsStore.settings.provider === 'ollama' || !settingsStore.settings.provider">
             <span>Ollama is not configured. <router-link to="/settings" class="warning-link">Open Settings</router-link>
               to set up your server URL and model.</span>
@@ -205,6 +215,35 @@
     background: rgba(245, 158, 11, 0.08);
     color: var(--color-warning-500);
     border-color: rgba(245, 158, 11, 0.15);
+  }
+
+  .wip-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--color-warning-50, #fffbeb);
+    color: var(--color-warning-700, #b45309);
+    font-size: 13px;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--color-warning-100, #fef3c7);
+  }
+
+  .wip-banner .wip-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  [data-theme="dark"] .wip-banner {
+    background: rgba(245, 158, 11, 0.08);
+    color: var(--color-warning-500, #f59e0b);
+    border-color: rgba(245, 158, 11, 0.15);
+  }
+
+  .wip-link {
+    font-weight: 600;
+    text-decoration: underline;
+    color: inherit;
   }
 
   .warning-link {

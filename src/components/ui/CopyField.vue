@@ -1,5 +1,6 @@
 <script setup lang="ts">
     import { ref } from 'vue';
+    import { Check, ClipboardCopy } from 'lucide-vue-next';
 
     const props = defineProps<{
         value: string;
@@ -40,17 +41,9 @@
                 class="h-full px-3 border-l flex items-center transition-colors hover:bg-[var(--bg-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
                 style="border-color: var(--border-default);" @click="copy">
                 <!-- Check icon (copied state) -->
-                <svg v-if="copied" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    stroke-width="2.5" style="color: #10b981;">
-                    <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <Check v-if="copied" :size="14" :stroke-width="2.5" style="color: #10b981;" />
                 <!-- Clipboard icon (default state) -->
-                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    stroke-width="1.75" style="color: var(--text-tertiary);">
-                    <rect x="9" y="2" width="6" height="4" rx="1" stroke-linecap="round" stroke-linejoin="round" />
-                    <path d="M9 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V4a2 2 0 00-2-2h-3" stroke-linecap="round"
-                        stroke-linejoin="round" />
-                </svg>
+                <ClipboardCopy v-else :size="14" :stroke-width="1.75" style="color: var(--text-tertiary);" />
             </button>
         </div>
     </div>

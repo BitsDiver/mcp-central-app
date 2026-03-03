@@ -5,7 +5,8 @@ import { connectAll, disconnectAll, getSocket } from "@/api/socket";
 import { useToolStore } from "./tools";
 import { useStatusStore } from "./status";
 import { useEndpointStore } from "./endpoints";
-import type { Tool, UpstreamStatus } from "@/types";
+import { useMcpClientsStore } from "./mcpClients";
+import type { Tool, UpstreamStatus, ConnectedMcpClient } from "@/types";
 
 export const useSocketStore = defineStore("socket", () => {
   const connected = ref(false);
@@ -57,6 +58,19 @@ export const useSocketStore = defineStore("socket", () => {
               : {}),
           });
         }
+      },
+    );
+    // ── MCP client sessions (downstream AI clients) ──────────
+    endpoints.on("mcp_client_connected", (payload: ConnectedMcpClient) => {
+      const mcpClientsStore = useMcpClientsStore();
+      mcpClientsStore.addClient(payload);
+    });
+
+    endpoints.on(
+      "mcp_client_disconnected",
+      (payload: { sessionId: string }) => {
+        const mcpClientsStore = useMcpClientsStore();
+        mcpClientsStore.removeClient(payload.sessionId);
       },
     );
   }

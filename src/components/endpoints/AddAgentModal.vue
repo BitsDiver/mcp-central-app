@@ -1,5 +1,6 @@
 <script setup lang="ts">
     import { ref, computed } from 'vue';
+    import { TriangleAlert, Download } from 'lucide-vue-next';
     import AppModal from '@/components/ui/AppModal.vue';
     import AppButton from '@/components/ui/AppButton.vue';
     import AppInput from '@/components/ui/AppInput.vue';
@@ -121,12 +122,7 @@
             <div class="flex flex-col gap-5">
                 <div class="flex items-start gap-3 p-3 rounded-lg border"
                     style="background: rgba(234,179,8,.06); border-color: rgba(234,179,8,.3);">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        class="shrink-0 mt-0.5" style="color: #ca8a04;">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                        <line x1="12" y1="9" x2="12" y2="13" />
-                        <line x1="12" y1="17" x2="12.01" y2="17" />
-                    </svg>
+                    <TriangleAlert :size="16" class="shrink-0 mt-0.5" style="color: #ca8a04;" />
                     <p class="text-xs leading-relaxed" style="color: var(--text-secondary);">
                         <strong>Save this API key — it won't be shown again.</strong>
                         Copy it to your <code class="font-mono">mcp-agent.json</code> config or download the file below.
@@ -154,10 +150,7 @@
                             style="color: var(--text-tertiary);">mcp-agent.json</label>
                         <button type="button" class="text-xs flex items-center gap-1 transition-colors hover:underline"
                             style="color: var(--text-link);" @click="downloadConfig">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                            </svg>
+                            <Download :size="12" />
                             Download
                         </button>
                     </div>

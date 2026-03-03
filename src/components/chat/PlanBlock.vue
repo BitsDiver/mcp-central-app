@@ -1,5 +1,6 @@
 <script setup lang="ts">
     import { ref, computed, nextTick } from 'vue';
+    import { Zap, SquarePen, ChevronUp, ChevronDown, Trash2, Plus, Check, X } from 'lucide-vue-next';
     import { useAgentPlanningStore } from '@/stores/agentPlanning';
     import { renderMarkdown } from '@/composables/useMarkdown';
     import ToolCallBlock from '@/components/chat/ToolCallBlock.vue';
@@ -152,10 +153,7 @@
     <div class="plan-block">
         <!-- Header ──────────────────────────────────────────────── -->
         <div class="plan-header">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                class="plan-icon" aria-hidden="true">
-                <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
+            <Zap :size="13" :stroke-width="2" class="plan-icon" aria-hidden="true" />
             <!-- Editable title (pending only) -->
             <input v-if="editingTitle" ref="titleInput" v-model="editTitleText" class="plan-title-input"
                 @blur="commitTitleEdit" @keydown.enter="commitTitleEdit" @keydown.escape="cancelTitleEdit" />
@@ -196,40 +194,23 @@
                         <!-- Edit pencil (pending only) -->
                         <button v-if="isPending && editingTaskId !== task.id" type="button" class="meta-btn"
                             title="Edit task" @click="startEdit(task)">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
-                                    stroke-linecap="round" />
-                                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
-                                    stroke-linecap="round" />
-                            </svg>
+                            <SquarePen :size="10" :stroke-width="2" />
                         </button>
                         <!-- Move up -->
                         <button v-if="isPending" type="button" class="meta-btn" :disabled="groupIndexOf(task.id) === 0"
                             title="Move up" @click="handleMoveUp(task.id)">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2.5">
-                                <polyline points="18 15 12 9 6 15" stroke-linecap="round" />
-                            </svg>
+                            <ChevronUp :size="10" :stroke-width="2.5" />
                         </button>
                         <!-- Move down -->
                         <button v-if="isPending" type="button" class="meta-btn"
                             :disabled="groupIndexOf(task.id) === livePlan.parallelGroups.length - 1" title="Move down"
                             @click="handleMoveDown(task.id)">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2.5">
-                                <polyline points="6 9 12 15 18 9" stroke-linecap="round" />
-                            </svg>
+                            <ChevronDown :size="10" :stroke-width="2.5" />
                         </button>
                         <!-- Delete task -->
                         <button v-if="isPending" type="button" class="meta-btn meta-btn--danger" title="Remove task"
                             @click="handleRemoveTask(task.id)">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <polyline points="3 6 5 6 21 6" stroke-linecap="round" />
-                                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" stroke-linecap="round" />
-                                <path d="M10 11v6M14 11v6" stroke-linecap="round" />
-                            </svg>
+                            <Trash2 :size="10" :stroke-width="2" />
                         </button>
                     </div>
 
@@ -259,11 +240,8 @@
                         <!-- Result toggleable area -->
                         <div v-if="taskResult(task)" class="task-result-area">
                             <button type="button" class="result-toggle" @click="toggleExpand(task.id)">
-                                <svg :class="['toggle-chevron', { 'toggle-chevron--open': expandedTaskIds.has(task.id) }]"
-                                    width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2.5">
-                                    <polyline points="6 9 12 15 18 9" stroke-linecap="round" />
-                                </svg>
+                                <ChevronDown :size="10" :stroke-width="2.5"
+                                    :class="['toggle-chevron', { 'toggle-chevron--open': expandedTaskIds.has(task.id) }]" />
                                 {{ expandedTaskIds.has(task.id) ? 'Hide result' : 'Show result' }}
                             </button>
                             <div v-if="expandedTaskIds.has(task.id)" class="task-result markdown-body"
@@ -273,11 +251,8 @@
                         <!-- Tool calls made during this task -->
                         <div v-if="taskToolCalls(task).length" class="task-tools-area">
                             <button type="button" class="result-toggle" @click="toggleToolsExpand(task.id)">
-                                <svg :class="['toggle-chevron', { 'toggle-chevron--open': expandedToolsIds.has(task.id) }]"
-                                    width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2.5">
-                                    <polyline points="6 9 12 15 18 9" stroke-linecap="round" />
-                                </svg>
+                                <ChevronDown :size="10" :stroke-width="2.5"
+                                    :class="['toggle-chevron', { 'toggle-chevron--open': expandedToolsIds.has(task.id) }]" />
                                 {{ taskToolCalls(task).length }}
                                 tool{{ taskToolCalls(task).length !== 1 ? 's' : '' }} used
                             </button>
@@ -293,10 +268,7 @@
         <!-- Add task button (pending only) ───────────────────── -->
         <div v-if="isPending" class="add-task-row">
             <button type="button" class="btn-add-task" @click="handleAddTask">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <line x1="12" y1="5" x2="12" y2="19" stroke-linecap="round" />
-                    <line x1="5" y1="12" x2="19" y2="12" stroke-linecap="round" />
-                </svg>
+                <Plus :size="11" :stroke-width="2.5" />
                 Add task
             </button>
         </div>
@@ -304,15 +276,11 @@
         <!-- Approve / Reject footer ─────────────────────────────── -->
         <div v-if="isPending" class="plan-footer">
             <button type="button" class="btn-approve" @click="planningStore.approvePlan(livePlan.id)">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <polyline points="20 6 9 17 4 12" stroke-linecap="round" />
-                </svg>
+                <Check :size="12" :stroke-width="2.5" />
                 Approve &amp; Run
             </button>
             <button type="button" class="btn-reject" @click="planningStore.rejectPlan(livePlan.id)">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" />
-                </svg>
+                <X :size="12" :stroke-width="2" />
                 Reject
             </button>
         </div>

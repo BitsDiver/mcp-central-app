@@ -1,8 +1,34 @@
 <script setup lang="ts">
-    import { ref, computed, onMounted, onUnmounted } from 'vue';
+    import { ref, computed, onMounted, onUnmounted, markRaw, type Component } from 'vue';
+    import { AppWindow, Router, MonitorSmartphone } from 'lucide-vue-next';
     import { emitAgent, getSocket } from '@/api/socket';
     import SkeletonBlock from '@/components/ui/SkeletonBlock.vue';
     import StatusBadge from '@/components/ui/StatusBadge.vue';
+    import { useMcpClientsStore } from '@/stores/mcpClients';
+    import type { ConnectedMcpClient } from '@/types';
+
+    // AI client brand icons
+    import IconVSCode from '@/components/icons/IconVSCode.vue';
+    import IconCursor from '@/components/icons/IconCursor.vue';
+    import IconWindsurf from '@/components/icons/IconWindsurf.vue';
+    import IconZed from '@/components/icons/IconZed.vue';
+    import IconCline from '@/components/icons/IconCline.vue';
+    import IconJetBrains from '@/components/icons/IconJetBrains.vue';
+    import IconOpenWebUI from '@/components/icons/IconOpenWebUI.vue';
+    import IconAntigravity from '@/components/icons/IconAntigravity.vue';
+
+    const CLIENT_ICONS: Record<string, Component> = {
+        vscode: markRaw(IconVSCode),
+        cursor: markRaw(IconCursor),
+        windsurf: markRaw(IconWindsurf),
+        zed: markRaw(IconZed),
+        cline: markRaw(IconCline),
+        jetbrains: markRaw(IconJetBrains),
+        openwebui: markRaw(IconOpenWebUI),
+        antigravity: markRaw(IconAntigravity),
+    };
+
+    const mcpClientsStore = useMcpClientsStore();
 
     interface BrowserSession {
         socketId: string;
@@ -101,6 +127,25 @@
     }
 
     onMounted(load);
+    onMounted(() => mcpClientsStore.load());
+
+    // Real-time MCP client sessions
+    function onMcpClientConnected(data: ConnectedMcpClient) {
+        mcpClientsStore.addClient(data);
+    }
+    function onMcpClientDisconnected(data: { sessionId: string; }) {
+        mcpClientsStore.removeClient(data.sessionId);
+    }
+    onMounted(() => {
+        const sock = getSocket('endpoints');
+        sock?.on('mcp_client_connected', onMcpClientConnected);
+        sock?.on('mcp_client_disconnected', onMcpClientDisconnected);
+    });
+    onUnmounted(() => {
+        const sock = getSocket('endpoints');
+        sock?.off('mcp_client_connected', onMcpClientConnected);
+        sock?.off('mcp_client_disconnected', onMcpClientDisconnected);
+    });
 
     // Real-time agent connection status
     function onAgentConnected(data: { agentId: string; }) {
@@ -156,7 +201,7 @@
             <div>
                 <h2 class="text-base font-semibold" style="color: var(--text-primary);">Active Sessions</h2>
                 <p class="text-sm mt-0.5" style="color: var(--text-secondary);">
-                    Live browser connections and local agent tunnels.
+                    Live browser connections, MCP client sessions, and local agent tunnels.
                 </p>
             </div>
             <button type="button" @click="load" :disabled="loading"
@@ -177,10 +222,7 @@
         <section>
             <h3 class="text-[11px] uppercase tracking-wider font-semibold mb-3 flex items-center gap-2"
                 style="color: var(--text-tertiary);">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" />
-                    <path d="M3 9h18M9 21V9" stroke-linecap="round" />
-                </svg>
+                <AppWindow :size="13" />
                 Browser clients
                 <span class="ml-auto font-medium text-[11px] px-1.5 py-0.5 rounded-md"
                     style="background: var(--bg-muted); color: var(--text-secondary);">{{ browserGroups.length }}</span>
@@ -253,14 +295,83 @@
             </div>
         </section>
 
+        <!-- ── MCP Client Sessions ── -->
+        <section>
+            <h3 class="text-[11px] uppercase tracking-wider font-semibold mb-3 flex items-center gap-2"
+                style="color: var(--text-tertiary);">
+                <MonitorSmartphone :size="13" />
+                MCP client sessions
+                <span class="ml-auto font-medium text-[11px] px-1.5 py-0.5 rounded-md"
+                    style="background: var(--bg-muted); color: var(--text-secondary);">{{
+                        mcpClientsStore.enrichedClients.length }}</span>
+            </h3>
+
+            <!-- Loading skeletons -->
+            <div v-if="mcpClientsStore.isLoading" class="flex flex-col gap-2">
+                <div v-for="i in 2" :key="i" class="rounded-xl border px-4 py-3 flex items-center gap-3"
+                    style="background: var(--bg-card); border-color: var(--border-default);">
+                    <SkeletonBlock width="2rem" height="2rem" />
+                    <div class="flex-1 flex flex-col gap-1.5">
+                        <SkeletonBlock width="35%" height="0.75rem" />
+                        <SkeletonBlock width="55%" height="0.65rem" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty -->
+            <div v-else-if="mcpClientsStore.enrichedClients.length === 0" class="py-8 text-center rounded-xl border"
+                style="background: var(--bg-muted); border-color: var(--border-default);">
+                <p class="text-sm" style="color: var(--text-tertiary);">No MCP client sessions active for this tenant.
+                </p>
+            </div>
+
+            <!-- Session rows -->
+            <div v-else class="flex flex-col gap-2">
+                <div v-for="client in mcpClientsStore.enrichedClients" :key="client.sessionId"
+                    class="rounded-xl border px-4 py-3 flex items-start gap-3"
+                    style="background: var(--bg-card); border-color: var(--border-default);">
+                    <!-- Client icon -->
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                        :style="`background: ${client.identified.brandColor}15;`">
+                        <component v-if="client.identified.clientId && CLIENT_ICONS[client.identified.clientId]"
+                            :is="CLIENT_ICONS[client.identified.clientId]" class="w-4 h-4"
+                            :style="`color: ${client.identified.brandColor};`" />
+                        <MonitorSmartphone v-else :size="14" :style="`color: ${client.identified.brandColor};`" />
+                    </div>
+                    <!-- Info -->
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium" style="color: var(--text-primary);">
+                            {{ client.identified.displayName }}
+                        </p>
+                        <p v-if="client.clientVersion" class="text-xs" style="color: var(--text-secondary);">
+                            v{{ client.clientVersion }}
+                        </p>
+                        <code v-if="client.userAgent" class="text-[10px] font-mono block truncate mt-0.5"
+                            style="color: var(--text-tertiary); max-width: 350px;" :title="client.userAgent">
+                            {{ client.userAgent }}
+                        </code>
+                        <code class="text-[10px] font-mono block mt-0.5" style="color: var(--text-tertiary);">
+                            session: {{ client.sessionId.slice(0, 8) }}…
+                        </code>
+                    </div>
+                    <!-- Meta -->
+                    <div class="text-right shrink-0">
+                        <p class="text-xs" style="color: var(--text-secondary);">{{ formatDate(client.connectedAt) }}
+                        </p>
+                        <span class="inline-flex items-center gap-1 mt-1.5">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span class="text-[10px] font-medium" style="color: #10b981;">live</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- ── Local Agents ── -->
         <section>
             <h3 class="text-[11px] uppercase tracking-wider font-semibold mb-3 flex items-center gap-2"
                 style="color: var(--text-tertiary);">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="2" y="3" width="20" height="14" rx="2" />
-                    <path d="M8 21h8M12 17v4" stroke-linecap="round" />
-                </svg>
+                <Router :size="13" />
                 Local agents
                 <span class="ml-auto font-medium text-[11px] px-1.5 py-0.5 rounded-md"
                     style="background: var(--bg-muted); color: var(--text-secondary);">{{ agentSessions.length }}</span>
@@ -292,13 +403,8 @@
                     <!-- Status dot / icon -->
                     <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
                         :style="agent.isConnected ? 'background: rgba(16,185,129,.12);' : 'background: var(--bg-muted);'">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2"
-                            :style="agent.isConnected ? 'color: #10b981;' : 'color: var(--text-tertiary);'">
-                            <path
-                                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17H4a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2h-1"
-                                stroke-linecap="round" />
-                        </svg>
+                        <Router :size="14"
+                            :style="agent.isConnected ? 'color: #10b981;' : 'color: var(--text-tertiary);'" />
                     </div>
                     <!-- Info -->
                     <div class="flex-1 min-w-0">

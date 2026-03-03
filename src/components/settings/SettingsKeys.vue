@@ -1,5 +1,6 @@
 <script setup lang="ts">
     import { ref, computed, onMounted } from 'vue';
+    import { Plus, KeyRound, RefreshCw, Ban, TriangleAlert, Copy, Check } from 'lucide-vue-next';
     import AppButton from '@/components/ui/AppButton.vue';
     import AppModal from '@/components/ui/AppModal.vue';
     import AppInput from '@/components/ui/AppInput.vue';
@@ -136,9 +137,7 @@
                     Claude Desktop…) to authenticate with this tenant’s proxy</p>
             </div>
             <AppButton class="shrink-0" @click="showCreateModal = true">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <path d="M12 5v14M5 12h14" />
-                </svg>
+                <Plus :size="16" :stroke-width="2.5" />
                 Create Key
             </AppButton>
         </div>
@@ -155,12 +154,7 @@
         <EmptyState v-else-if="tenantStore.apiKeys.length === 0" title="No API keys"
             description="Create an API key to connect MCP clients to this tenant.">
             <template #icon>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-                    style="color: var(--text-tertiary);">
-                    <path
-                        d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-                        stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <KeyRound :size="24" :stroke-width="1.5" style="color: var(--text-tertiary);" />
             </template>
             <AppButton size="sm" @click="showCreateModal = true">Create API Key</AppButton>
         </EmptyState>
@@ -202,20 +196,11 @@
                         <td class="px-5 py-3">
                             <div class="flex items-center gap-1 justify-end">
                                 <AppButton variant="ghost" size="sm" @click="regenerateTarget = key">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2" class="text-amber-500">
-                                        <path
-                                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                            stroke-linecap="round" stroke-linejoin="round" />
-                                    </svg>
+                                    <RefreshCw :size="14" class="text-amber-500" />
                                     Regenerate
                                 </AppButton>
                                 <AppButton variant="ghost" size="sm" @click="revokeTarget = key">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2" class="text-red-500">
-                                        <path
-                                            d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                                    </svg>
+                                    <Ban :size="14" class="text-red-500" />
                                     Revoke
                                 </AppButton>
                             </div>
@@ -245,12 +230,7 @@
         <div class="flex flex-col gap-5">
             <div class="flex items-start gap-3 p-3 rounded-lg border border-amber-200"
                 style="background: rgba(251,191,36,.08);">
-                <svg class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2">
-                    <path
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                        stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
+                <TriangleAlert class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                 <p class="text-sm font-medium" style="color: var(--text-primary);">Copy and save this key now — it will
                     never be shown again.</p>
             </div>
@@ -264,15 +244,8 @@
                         style="background: var(--bg-muted); color: var(--text-primary); border-color: var(--border-default);">{{
                             createdKey }}</code>
                     <AppButton variant="secondary" size="sm" @click="copyKey" class="shrink-0">
-                        <svg v-if="!copiedKey" width="14" height="14" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                        </svg>
-                        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" class="text-green-500">
-                            <path d="M20 6L9 17l-5-5" />
-                        </svg>
+                        <Copy v-if="!copiedKey" :size="14" />
+                        <Check v-else :size="14" class="text-green-500" />
                         {{ copiedKey ? 'Copied!' : 'Copy' }}
                     </AppButton>
                 </div>
@@ -285,15 +258,8 @@
                         style="color: var(--text-tertiary);">VS
                         Code — settings.json</label>
                     <AppButton variant="ghost" size="sm" @click="copyVscodeConfig">
-                        <svg v-if="!copiedVscode" width="14" height="14" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                        </svg>
-                        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" class="text-green-500">
-                            <path d="M20 6L9 17l-5-5" />
-                        </svg>
+                        <Copy v-if="!copiedVscode" :size="14" />
+                        <Check v-else :size="14" class="text-green-500" />
                         {{ copiedVscode ? 'Copied!' : 'Copy snippet' }}
                     </AppButton>
                 </div>
