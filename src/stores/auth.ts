@@ -3,6 +3,7 @@ import { ref, computed } from "vue";
 import type { User } from "@/types";
 import { setupApi } from "@/api/client";
 import { setAuth0Token } from "@/api/client";
+import { clearTokens } from "@/auth/tokenStore";
 
 export const useAuthStore = defineStore("auth", () => {
   const user = ref<User | null>(null);
@@ -37,6 +38,7 @@ export const useAuthStore = defineStore("auth", () => {
     user.value = null;
     token.value = null;
     setAuth0Token(null);
+    clearTokens();
   }
 
   return {

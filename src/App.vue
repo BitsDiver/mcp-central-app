@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { watch } from 'vue';
   import { useRouter } from 'vue-router';
-  import { useAuth0 } from '@auth0/auth0-vue';
+  import { useAuth } from '@/auth/useAuth';
   import { useAuthStore } from '@/stores/auth';
   import { useTenantStore } from '@/stores/tenant';
   import { useSocketStore } from '@/stores/socket';
@@ -16,7 +16,7 @@
   import { purgeAllChatKeys, revokeAllChatKeys } from '@/composables/useChatMcpKey';
   import { resetMcpSession } from '@/api/mcpClient';
 
-  const { isAuthenticated, isLoading, getAccessTokenSilently } = useAuth0();
+  const { isAuthenticated, isLoading, getAccessTokenSilently } = useAuth();
   const router = useRouter();
   const authStore = useAuthStore();
   const tenantStore = useTenantStore();

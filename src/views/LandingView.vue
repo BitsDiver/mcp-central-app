@@ -1,10 +1,10 @@
 <script setup lang="ts">
-  import { useAuth0 } from '@auth0/auth0-vue';
+  import { useAuth } from '@/auth/useAuth';
   import { useDarkMode } from '@/composables/useDarkMode';
   import AppButton from '@/components/ui/AppButton.vue';
   import { Layers, Sun, Moon, LogIn } from 'lucide-vue-next';
 
-  const { loginWithRedirect, isLoading } = useAuth0();
+  const { loginWithRedirect, isLoading } = useAuth();
   const { isDark, toggle } = useDarkMode();
 
   function login() {

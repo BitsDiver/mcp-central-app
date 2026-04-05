@@ -1,13 +1,13 @@
 <script setup lang="ts">
   import { ref } from 'vue';
   import { onClickOutside } from '@vueuse/core';
-  import { useAuth0 } from '@auth0/auth0-vue';
+  import { useAuth } from '@/auth/useAuth';
   import { useDarkMode } from '@/composables/useDarkMode';
   import { useAuthStore } from '@/stores/auth';
   import TenantSwitcher from './TenantSwitcher.vue';
   import { Sun, Moon, ChevronDown, User, LogOut } from 'lucide-vue-next';
 
-  const { logout } = useAuth0();
+  const { logout } = useAuth();
   const { isDark, toggle } = useDarkMode();
   const authStore = useAuthStore();
 
@@ -17,7 +17,7 @@
   onClickOutside(menuRef, () => { menuOpen.value = false; });
 
   function handleLogout() {
-    logout({ logoutParams: { returnTo: window.location.origin } });
+    logout();
   }
 </script>
 

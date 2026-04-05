@@ -2,11 +2,9 @@
     import AppToggle from '@/components/ui/AppToggle.vue';
     import { useAuthStore } from '@/stores/auth';
     import { useDarkMode } from '@/composables/useDarkMode';
-    import { useAuth0 } from '@auth0/auth0-vue';
 
     const authStore = useAuthStore();
     const { isDark, toggle } = useDarkMode();
-    const { user: auth0User } = useAuth0();
 
     function formatDate(date: string): string {
         return new Intl.DateTimeFormat('en', { dateStyle: 'long' }).format(new Date(date));
@@ -28,8 +26,7 @@
                 <div class="flex items-center justify-between py-2 border-b"
                     style="border-color: var(--border-default);">
                     <dt class="text-sm" style="color: var(--text-secondary);">Email</dt>
-                    <dd class="text-sm font-medium" style="color: var(--text-primary);">{{ authStore.user?.email ||
-                        auth0User?.email || '—' }}</dd>
+                    <dd class="text-sm font-medium" style="color: var(--text-primary);">{{ authStore.user?.email ?? '—' }}</dd>
                 </div>
                 <div class="flex items-center justify-between py-2 border-b"
                     style="border-color: var(--border-default);">

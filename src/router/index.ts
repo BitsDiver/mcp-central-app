@@ -57,6 +57,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: "/callback",
+    name: "callback",
+    component: () => import("@/views/CallbackView.vue"),
+    meta: { requiresAuth: false },
+  },
+  {
     path: "/:pathMatch(.*)*",
     redirect: "/",
   },
