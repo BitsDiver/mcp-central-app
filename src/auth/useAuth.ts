@@ -49,15 +49,41 @@ let _config: PkceConfig = {
 
 /**
  * Initialize the auth module. Call once in main.ts before mounting the app.
+ * Returns a Promise so main.ts can `await initAuth()` before mounting.
  *
- * Reads from environment variables:
- *   VITE_AUTH_SERVICE_URL      — auth-service public URL
- *   VITE_AUTH_SERVICE_CLIENT_ID — OAuth2 client_id (= app slug)
+ * Config resolution strategy (first non-empty value wins):
+ *   1. VITE_AUTH_SERVICE_URL / VITE_AUTH_SERVICE_CLIENT_ID  — baked in at
+ *      build time (local dev with `pnpm dev`).
+ *   2. GET /api/env  — runtime injection from the backend's own env vars.
+ *      Used in production where the SPA is served as pre-built static files
+ *      and the VITE_* values are empty.
  */
-export function initAuth(): void {
+export async function initAuth(): Promise<void> {
+  let authServiceUrl = import.meta.env.VITE_AUTH_SERVICE_URL ?? "";
+  let clientId = import.meta.env.VITE_AUTH_SERVICE_CLIENT_ID ?? "";
+
+  // If either value is missing, fetch runtime config from the backend.
+  if (!authServiceUrl || !clientId) {
+    try {
+      const res = await fetch("/api/env");
+      if (res.ok) {
+        const json = (await res.json()) as {
+          authServiceUrl?: string;
+          clientId?: string;
+        };
+        if (!authServiceUrl && json.authServiceUrl)
+          authServiceUrl = json.authServiceUrl;
+        if (!clientId && json.clientId) clientId = json.clientId;
+      }
+    } catch {
+      // Network error — config will remain empty and the first auth attempt
+      // will throw a clear "not a valid URL" error.
+    }
+  }
+
   _config = {
-    authServiceUrl: import.meta.env.VITE_AUTH_SERVICE_URL ?? "",
-    clientId: import.meta.env.VITE_AUTH_SERVICE_CLIENT_ID ?? "",
+    authServiceUrl,
+    clientId,
     redirectUri: `${window.location.origin}/callback`,
     scopes: "openid profile email offline_access roles permissions features",
   };

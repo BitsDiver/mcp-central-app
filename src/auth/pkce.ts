@@ -20,9 +20,32 @@ export function generateCodeVerifier(): string {
   return oauth.generateRandomCodeVerifier();
 }
 
-/** Computes the S256 code challenge from a verifier. */
-export async function generateCodeChallenge(verifier: string): Promise<string> {
-  return oauth.calculatePKCECodeChallenge(verifier);
+/**
+ * Computes the S256 code challenge from a verifier.
+ *
+ * Falls back to the `plain` method when `crypto.subtle` is unavailable
+ * (plain HTTP on a non-localhost origin — dev only).
+ * In that case the challenge equals the verifier and `code_challenge_method`
+ * is set to `"plain"` in the authorization URL.
+ *
+ * `crypto.subtle` is always available on `https://` origins and on
+ * `http://localhost`, so production deployments are unaffected.
+ */
+async function computeCodeChallenge(
+  verifier: string,
+): Promise<{ challenge: string; method: "S256" | "plain" }> {
+  if (typeof crypto !== "undefined" && crypto.subtle) {
+    const challenge = await oauth.calculatePKCECodeChallenge(verifier);
+    return { challenge, method: "S256" };
+  }
+  // Non-secure context (plain HTTP on a custom hostname).
+  // S256 is unavailable — fall back to plain PKCE.
+  // This should only happen in development; use HTTPS in production.
+  console.warn(
+    "[auth] crypto.subtle unavailable (non-secure context). " +
+      "Falling back to PKCE 'plain' method. Use HTTPS in production.",
+  );
+  return { challenge: verifier, method: "plain" };
 }
 
 /** Generates a random `state` parameter for CSRF protection. */
@@ -51,7 +74,7 @@ export interface PkceConfig {
  */
 export async function buildAuthorizationUrl(config: PkceConfig): Promise<URL> {
   const verifier = generateCodeVerifier();
-  const challenge = await generateCodeChallenge(verifier);
+  const { challenge, method } = await computeCodeChallenge(verifier);
   const state = generateState();
 
   sessionStorage.setItem("oidc_code_verifier", verifier);
@@ -68,7 +91,7 @@ export async function buildAuthorizationUrl(config: PkceConfig): Promise<URL> {
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", config.scopes);
   url.searchParams.set("code_challenge", challenge);
-  url.searchParams.set("code_challenge_method", "S256");
+  url.searchParams.set("code_challenge_method", method);
   url.searchParams.set("state", state);
 
   return url;
