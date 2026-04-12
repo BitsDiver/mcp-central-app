@@ -7,9 +7,6 @@ export interface AdminUser {
   id: string;
   email: string | null;
   name: string | null;
-  role: "admin" | "user";
-  isDisabled: boolean;
-  subscriptionPlan: "free" | "pro" | "enterprise" | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -70,43 +67,6 @@ export const useUsersStore = defineStore("users", () => {
     }
   }
 
-  async function updateRole(
-    userId: string,
-    role: "admin" | "user",
-  ): Promise<AdminUser> {
-    const res = await emitUsers<{ user: AdminUser }>("updateRole", {
-      userId,
-      role,
-    });
-    if (res.status === "error") throw new Error(res.message ?? res.code);
-    const updated = res.data!.user;
-    const idx = users.value.findIndex((u) => u.id === userId);
-    if (idx !== -1) users.value[idx] = updated;
-    return updated;
-  }
-
-  async function disableUser(userId: string): Promise<AdminUser> {
-    const res = await emitUsers<{ user: AdminUser }>("disableUser", {
-      userId,
-    });
-    if (res.status === "error") throw new Error(res.message ?? res.code);
-    const updated = res.data!.user;
-    const idx = users.value.findIndex((u) => u.id === userId);
-    if (idx !== -1) users.value[idx] = { ...users.value[idx], ...updated };
-    return updated;
-  }
-
-  async function enableUser(userId: string): Promise<AdminUser> {
-    const res = await emitUsers<{ user: AdminUser }>("enableUser", {
-      userId,
-    });
-    if (res.status === "error") throw new Error(res.message ?? res.code);
-    const updated = res.data!.user;
-    const idx = users.value.findIndex((u) => u.id === userId);
-    if (idx !== -1) users.value[idx] = { ...users.value[idx], ...updated };
-    return updated;
-  }
-
   function clear(): void {
     users.value = [];
     error.value = null;
@@ -121,9 +81,6 @@ export const useUsersStore = defineStore("users", () => {
     connect,
     disconnect,
     listUsers,
-    updateRole,
-    disableUser,
-    enableUser,
     clear,
   };
 });

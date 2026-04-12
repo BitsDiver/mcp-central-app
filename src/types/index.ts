@@ -30,7 +30,8 @@ export interface User {
   email: string;
   name: string;
   role: "admin" | "user";
-  isDisabled?: boolean;
+  permissions: string[];
+  features: Record<string, unknown>;
   createdAt: string;
 }
 
